@@ -1,0 +1,10 @@
+cmake_minimum_required(VERSION 2.6)
+project(GPU-PolyPhase-Filter-Bank)
+
+SET(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMake/cuda" ${CMAKE_MODULE_PATH})
+FIND_PACKAGE(CUDA)
+
+CUDA_ADD_EXECUTABLE(gpfb main.cu)
+find_package(CUDA QUIET REQUIRED)
+
+CUDA_BUILD_CLEAN_TARGET()
