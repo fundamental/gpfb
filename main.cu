@@ -42,7 +42,7 @@ float *gen_saw(float *buf, size_t N, size_t period)
     return buf;
 }
 
-__global__ void convolve(float *coeff, size_t N, float *src, size_t M, float *dest)
+__global__ void convolve(float *coeff, size_t N, float *src, size_t M, float *dest, size_t chans)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i>M) 
@@ -51,11 +51,16 @@ __global__ void convolve(float *coeff, size_t N, float *src, size_t M, float *de
     //do actual work at i
     dest[i] = 0.0;
     for(size_t j=0; j<N; ++j)
-        dest[i] += src[i-j]*coeff[j];
+        if(j%chans==0)
+            dest[i] += src[i-j]*coeff[j];
 }
 
-float *apply_fir(float *buf, size_t N, float *coeff, size_t M)
+float *apply_fir(float *buf, size_t N, float *coeff, size_t M, size_t chans)
 {
+    //insure clean decimation
+    assert(M%chans==0);
+    assert(N%chans==0);
+
     float *cu_coeff=NULL, *cu_buf=NULL, *cu_smps=NULL;//r,r,w
 
     //Allocate
@@ -73,11 +78,11 @@ float *apply_fir(float *buf, size_t N, float *coeff, size_t M)
     puts("Running...");
     int block_size = 128;
     int blocks = N/block_size + (N%block_size == 0 ? 0:1);
-    convolve <<< blocks, block_size >>>(cu_coeff, M, cu_buf+M, N, cu_smps);
+    convolve <<< blocks, block_size >>>(cu_coeff, M, cu_buf+M, N, cu_smps, chans);
 
     //Retreive
     puts("Getting...");
-    !cudaMemcpy(buf, cu_smps, sizeof(float)*N, cudaMemcpyDeviceToHost);
+    cudaMemcpy(buf, cu_smps, sizeof(float)*N, cudaMemcpyDeviceToHost);
 
     //Clean
     puts("Cleaning...");
@@ -90,9 +95,10 @@ float *apply_fir(float *buf, size_t N, float *coeff, size_t M)
 
 int main()
 {
-    const size_t N=32;
+    const size_t CHANNELS = 4,
+                 N        = CHANNELS*8;
     float fir[N];
-    gen_fir(fir, N, 0.2);
+    gen_fir(fir, N, 1.0/CHANNELS);
 
     const size_t M=N*128;
     float buf[M+N];
@@ -108,7 +114,7 @@ int main()
     fclose(fb);
 
     //Apply to samples
-    apply_fir(smps, M, fir, N);
+    apply_fir(smps, M, fir, N, CHANNELS);
 
     //Show results
     FILE *fa = fopen("after.txt", "w+");
