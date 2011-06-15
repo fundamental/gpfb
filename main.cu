@@ -8,6 +8,9 @@
 
 const double PI = 3.14159265358979323846;
 
+const double FS = 1024;//MHz
+const unsigned FRAMES = 50;
+
 float sinc(float x)
 {
     if (x == 0.0f)
@@ -25,20 +28,57 @@ float *gen_fir(float *buf, unsigned taps, float fc)
     return buf;
 }
 
+
+//Generate random noise normalized to (-norm..norm)/2
 float *gen_rand(float *buf, size_t N, float norm)
 {
     for(size_t i=0;i<N;++i)
-        buf[i]=rand()*norm/RAND_MAX - norm/2.0;
+        buf[i] += rand()*norm/RAND_MAX - norm/2.0;
     return buf;
 }
 
+//Generate impulse
+float *gen_imp(float *buf, size_t N)
+{
+    (void) N;
+    *buf += 1.0;
+    return buf;
+}
+
+//Generate sawtooth wave with given period in samples
 float *gen_saw(float *buf, size_t N, size_t period)
 {
     const float low = period/-2.0;
-    printf("%f\n", low);
     float state     = low;
     for(size_t i=0;i<N;++i)
-        state = buf[i] = i%period ? state+1.0 : low;
+        buf[i] += (state = i%period ? state+1.0 : low)/-low;
+    return buf;
+}
+
+//Generate dc offset
+float *gen_dc(float *buf, size_t N)
+{
+    for(size_t i=0;i<N;++i)
+        buf[i] += 1.0;
+    return buf;
+}
+
+//generate sin wave at frequency fq
+float *gen_sin(float *buf, size_t N, float fq)
+{
+    const float rate = 2.0*PI*fq/FS;
+    for(size_t i=0;i<N;++i) //TODO change sin to cos after testing
+        buf[i] += cos(rate*i);
+    return buf;
+}
+
+//TODO update function to new conventions
+float *gen_chirp(float *buf, size_t N, size_t period, double dr)
+{
+    double rate = 2.0*PI/period,
+           state = 0;
+    for(size_t i=0;i<N;++i,state+=rate,rate+=dr)
+        buf[i] += sin(state);
     return buf;
 }
 
