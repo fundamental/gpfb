@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <cuda.h>
+#include <cufft.h>
 #include <assert.h>
 #include <err.h>
 
@@ -97,6 +98,31 @@ float *gen_chirp(float *buf, size_t N, size_t period, double dr)
     return buf;
 }
 
+//Complex to real
+float to_real(float x, float y)
+{
+    return sqrt(x*x+y*y);
+}
+
+#define checked(x) { cufftResult_t e = x; if(e) err(e, #x);}
+//apply fft using out of place transform
+float *apply_fft(float *src, float *dest, size_t transform_size, size_t batches)
+{
+    printf("Samples to fft: %ld\n", batches*transform_size);
+    assert(CUFFT_SUCCESS==0);
+    // Setup
+    cufftHandle plan;
+    checked(cufftPlan1d(&plan, transform_size, CUFFT_R2C, batches));
+
+    // Perform FFT
+    checked(cufftExecR2C(plan, src, (cufftComplex *)dest));
+
+    // Cleanup
+    checked(cufftDestroy(plan));
+
+    return dest;
+}
+
 __global__ void convolve(float *coeff, size_t N, float *src, size_t M, float *dest, size_t chans)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -125,7 +151,7 @@ float *apply_fir(float *buf, size_t N, float *coeff, size_t M, size_t chans)
     puts("Allocating...");
     checked(cudaMalloc((void **)&cu_coeff, M*sizeof(float)));
     checked(cudaMalloc((void **)&cu_smps, N*sizeof(float)));
-    checked(cudaMalloc((void **)&cu_buf, (N+M)*sizeof(float)));
+    checked(cudaMalloc((void **)&cu_buf, (N+M)*sizeof(cufftComplex)));
 
     //Send
     puts("Sending...");
@@ -133,17 +159,20 @@ float *apply_fir(float *buf, size_t N, float *coeff, size_t M, size_t chans)
     checked(cudaMemcpy(cu_buf, buf-M, (N+M)*sizeof(float), cudaMemcpyHostToDevice));
 
     //Run
-    puts("Running...");
+    puts("Filtering...");
     int block_size = 128;
     int blocks = N/block_size + (N%block_size == 0 ? 0:1);
     convolve <<< blocks, block_size >>>(cu_coeff, M, cu_buf+M, N, cu_smps, chans);
+    cudaDeviceSynchronize();
 
     //Post Process
-    //apply_fft(cu_smps, chans, N/chans);
+    puts("FFT...");
+    apply_fft(cu_smps, cu_buf, chans, N/chans);
+    cudaDeviceSynchronize();
 
     //Retreive
     puts("Getting...");
-    checked(cudaMemcpy(buf, cu_smps, sizeof(float)*N, cudaMemcpyDeviceToHost));
+    checked(cudaMemcpy(buf, cu_buf, sizeof(float)*N, cudaMemcpyDeviceToHost));
 
     //Clean
     puts("Cleaning...");
@@ -157,7 +186,7 @@ float *apply_fir(float *buf, size_t N, float *coeff, size_t M, size_t chans)
 int main()
 {
     const size_t CHANNELS = 8,
-                 N        = CHANNELS*8;
+                 N        = CHANNELS*16;
     float fir[N];
     gen_fir(fir, N, 0.5/CHANNELS);
     scale_fir(fir, N);
@@ -185,8 +214,11 @@ int main()
 
     //Show results
     FILE *fa = fopen("after.txt", "w+");
-    for(size_t i=0;i<M;++i)
-        fprintf(fa, "%c%f", i?',':' ', smps[i]);
+    float2 *out = (float2*)smps;
+    for(size_t i=0;i<M/2;i++) {
+        float smp = to_real(out[i].x, out[i].y);
+        fprintf(fa, "%c%f", i?',':' ', smp);
+    }
     fclose(fa);
     return 0;
 }
