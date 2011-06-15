@@ -95,6 +95,8 @@ __global__ void convolve(float *coeff, size_t N, float *src, size_t M, float *de
             dest[i] += src[i-j]*coeff[j];
 }
 
+#undef checked
+#define checked(x) { if(x!=cudaSuccess) err(1, #x);}
 float *apply_fir(float *buf, size_t N, float *coeff, size_t M, size_t chans)
 {
     //insure clean decimation
@@ -105,14 +107,14 @@ float *apply_fir(float *buf, size_t N, float *coeff, size_t M, size_t chans)
 
     //Allocate
     puts("Allocating...");
-    cudaMalloc((void **)&cu_coeff, M*sizeof(float));
-    cudaMalloc((void **)&cu_smps, N*sizeof(float));
-    cudaMalloc((void **)&cu_buf, (N+M)*sizeof(float));
+    checked(cudaMalloc((void **)&cu_coeff, M*sizeof(float)));
+    checked(cudaMalloc((void **)&cu_smps, N*sizeof(float)));
+    checked(cudaMalloc((void **)&cu_buf, (N+M)*sizeof(float)));
 
     //Send
     puts("Sending...");
-    cudaMemcpy(cu_coeff, coeff, M*sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(cu_buf, buf-M, (N+M)*sizeof(float), cudaMemcpyHostToDevice);
+    checked(cudaMemcpy(cu_coeff, coeff, M*sizeof(float), cudaMemcpyHostToDevice));
+    checked(cudaMemcpy(cu_buf, buf-M, (N+M)*sizeof(float), cudaMemcpyHostToDevice));
 
     //Run
     puts("Running...");
@@ -122,13 +124,13 @@ float *apply_fir(float *buf, size_t N, float *coeff, size_t M, size_t chans)
 
     //Retreive
     puts("Getting...");
-    cudaMemcpy(buf, cu_smps, sizeof(float)*N, cudaMemcpyDeviceToHost);
+    checked(cudaMemcpy(buf, cu_smps, sizeof(float)*N, cudaMemcpyDeviceToHost));
 
     //Clean
     puts("Cleaning...");
-    cudaFree(cu_coeff);
-    cudaFree(cu_smps);
-    cudaFree(cu_buf);
+    checked(cudaFree(cu_coeff));
+    checked(cudaFree(cu_smps));
+    checked(cudaFree(cu_buf));
     return buf;
 
 }
