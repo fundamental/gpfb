@@ -188,7 +188,7 @@ int main()
     const size_t CHANNELS = 8,
                  N        = CHANNELS*16;
     float fir[N];
-    gen_fir(fir, N, 0.5/CHANNELS);
+    gen_fir(fir, N, 1.0/CHANNELS);
     scale_fir(fir, N);
 
     const size_t M=N*FRAMES;
