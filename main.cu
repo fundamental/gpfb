@@ -215,9 +215,10 @@ int main()
     //Show results
     FILE *fa = fopen("after.txt", "w+");
     float2 *out = (float2*)smps;
-    for(size_t i=0;i<M/2;i++) {
+    for(size_t rowidx=-1,i=0;i<M/2;i++,rowidx++) {
         float smp = to_real(out[i].x, out[i].y);
-        fprintf(fa, "%c%f", i?',':' ', smp);
+        rowidx %= (CHANNELS/2+1);
+        fprintf(fa, "%c%f", rowidx?',':'\n', smp);
     }
     fclose(fa);
     return 0;
