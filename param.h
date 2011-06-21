@@ -7,8 +7,8 @@ const unsigned FRAMES = 64;
 const unsigned FS = 1024;//MHz
 
 //Filter Parameters
-const size_t CHANNELS = 64,
-             TAPS     = CHANNELS*16,
+const size_t CHANNELS = 32,
+             TAPS     = CHANNELS*8,
              MEM_SIZE = TAPS*FRAMES;
 
 //Numeric Constants
