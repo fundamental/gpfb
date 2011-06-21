@@ -20,10 +20,10 @@ int main()
     float fir[TAPS];
     gen_fir(fir, TAPS, CHANNELS);
     scale_fir(fir, TAPS);
+    window_fir(fir, TAPS);
 
-    float buf[MEM_SIZE+TAPS];
-    memset(buf, 0, sizeof(buf));
-    float *smps=buf+TAPS;
+    float smps[MEM_SIZE];
+    memset(smps, 0, sizeof(smps));
     //gen_chirp(smps, MEM_SIZE, 1024*16, 0.0008);
     //gen_cos(smps, FRAMES, 500.0);
     gen_dc(smps, MEM_SIZE);

@@ -1,3 +1,4 @@
+#include <stdint.h>
 
 /* Put fir coeffs into buf with length taps
  * The filter has a corner frequency at fc (normalized)
@@ -6,6 +7,20 @@ float *gen_fir(float *buf, unsigned taps, size_t chans);
 
 //Rescale FIR filter coeff
 float *scale_fir(float *buf, unsigned N);
+
+//Window with the hamming window
+float *window_fir(float *buf, size_t N);
+
+//8-bit Quantization
+/** 
+ * Perform 8 bit quantization and dequantization 
+ * Input is [-2.0..2.0], output is [0..255]
+ */
+const float q_factor = 255.0/4;
+#define quantize(i) ((i)+2)*q_factor
+#define unquantize(i) (i)/q_factor-2
+void apply_quantize(uint8_t *dest, const float *src, size_t N);
+void apply_unquantize(float *dest, const uint8_t *src, size_t N);
 
 //Generate random noise normalized to (-norm..norm)/2
 float *gen_rand(float *buf, size_t N, float norm);

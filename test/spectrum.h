@@ -11,22 +11,29 @@ static float to_real(float x, float y)
     return sqrt(x*x+y*y);
 };
 
+static float sqr(float x)
+{
+    return x*x;
+}
+
 typedef struct{float x,y;} float2;
 
-static void average(const float *data, float *chans)//[CHANNELS/2+1]
+static void avg(const float *data, float *chans)//[CHANNELS/2+1]
 {
     memset(chans, 0, (CHANNELS/2+1)*sizeof(float));
     float2 *out = (float2*)data;
     for(size_t rowidx=0,i=0;i<MEM_SIZE/2;i++,rowidx++) {
+        float smp = to_real(out[i].x, out[i].y);
         rowidx %= (CHANNELS/2+1);
-        chans[rowidx] += to_real(out[i].x, out[i].y);
+        chans[rowidx] += smp;
     }
 
-    for(size_t i=0;i<=CHANNELS/2;++i)
-        chans[i] = chans[i]*MEM_SIZE/(CHANNELS+2);
+    for(size_t i=0;i<=CHANNELS/2;++i)//Divide by length of avg and fft
+        chans[i] /= CHANNELS*MEM_SIZE/(CHANNELS*2+4); //multiplication by 2 to finish norm
+    //resulting values for pfb should be 0..1
 }
 
-class freqTest : public CxxTest::TestSuite
+class spectrumTest : public CxxTest::TestSuite
 {
     public:
     /*Verify Bin Sepatation is at least 40dB in magnitude from center
@@ -34,34 +41,15 @@ class freqTest : public CxxTest::TestSuite
     void testBins(void)
     {
         //Assuming all parameters should be used for testing
-        float stepSize = FS*1.0/CHANNELS;
+        float stepSize = FS*0.01/CHANNELS;
+        float chans[CHANNELS/2+1];
 
-        //Require some channel separation
-        for(unsigned i=0; i<CHANNELS/2+1; ++i) {
-
+        for(unsigned i=0; i*stepSize<FS/2.0; ++i) {
             const float freq = i*stepSize;
-            float chans[CHANNELS/2+1];
-            average(genCosResponse(freq), chans);
-
-            size_t expect = i;//==CHANNELS/2 ? 0 : i+1;
-
-#if 0
-            std::cout << "frequency = " << freq << std::endl;
-            //Expected location of signal
-            for(int j=0; j<CHANNELS/2+1; ++j) {
-                std::cout << "chan[" << j << "] = " << chans[j];
-                if(j==expect) std::cout << '*' << std::endl;
-                else std::cout << std::endl;
-            }
-#endif
-
-            //Ensure the selected channel has a signal
-            TS_ASSERT_LESS_THAN(1.0f, chans[expect]);
-            const float thresh = chans[expect]/10.0f;
-
-            for(unsigned j=0; j<CHANNELS/2+1; ++j)
-                if(j!=expect)
-                    TS_ASSERT_LESS_THAN(chans[j], thresh);
+            //printf("#frequency:=%f",freq);
+            avg(genCosResponse(freq), chans);
+            for(size_t i=0;i<=CHANNELS/2;++i)
+                printf("%c%f",i?',':'\n',chans[i]);
         }
     }
 
@@ -79,6 +67,7 @@ class freqTest : public CxxTest::TestSuite
         float fir[TAPS];
         gen_fir(fir, TAPS, CHANNELS);
         scale_fir(fir, TAPS);
+        window_fir(fir, TAPS);
 
         //Execute pfb
         apply_pfb(data, MEM_SIZE, fir, TAPS, CHANNELS);

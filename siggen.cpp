@@ -2,6 +2,7 @@
 #include <math.h>
 #include <assert.h>
 #include <stdlib.h>
+#include "siggen.h"
 
 static float sinc(float x)
 {
@@ -34,6 +35,29 @@ float *scale_fir(float *buf, unsigned N)
     return buf;
 }
 
+// hamming at n of N
+static float hamming(size_t n, size_t N)
+{
+    return 0.54-0.46*cos(2*PI*n/N);
+}
+
+float *window_fir(float *buf, size_t N)
+{
+    for(size_t i=0;i<N;++i)
+        buf[i] *= hamming(i,N);
+}
+
+void apply_quantize(uint8_t *dest, const float *src, size_t N)
+{
+    for(size_t i=0;i<N;++i)
+        dest[i] = quantize(src[i]);
+}
+
+void apply_unquantize(float *dest, const uint8_t *src, size_t N)
+{
+    for(size_t i=0;i<N;++i)
+        dest[i] = unquantize(src[i]);
+}
 
 float *gen_rand(float *buf, size_t N, float norm)
 {

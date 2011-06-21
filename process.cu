@@ -1,6 +1,8 @@
 #include <cuda.h>
 #include <cufft.h>
 #include <assert.h>
+#include <stdint.h>
+#include "siggen.h"
 #include <err.h>
 
 #define checked(x) { cufftResult_t e = x; if(e) err(e, #x);}
@@ -22,10 +24,24 @@ float *apply_fft(float *src, float *dest, size_t transform_size, size_t batches)
     return dest;
 }
 
+__global__ void cu_quantize(uint8_t *dest, const float *src, size_t N)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if(i<N)
+        dest[i] = quantize(src[i]);
+}
+
+__global__ void cu_unquantize(float *dest, const uint8_t *src, size_t N)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if(i<N)
+        dest[i] = unquantize(src[i]);
+}
+
 __global__ void convolve(float *coeff, size_t N, float *src, size_t M, float *dest, size_t chans)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i>M)
+    if (i>=M)
         return;
 
     unsigned sel = i%chans;
@@ -34,34 +50,46 @@ __global__ void convolve(float *coeff, size_t N, float *src, size_t M, float *de
     dest[i] = 0.0;
     for(size_t j=sel; j<N; j+=chans)
         dest[i] += src[i-sel-j]*coeff[j];
+    dest[i] /= chans;
 }
 
 #undef checked
 #define checked(x) { if(x!=cudaSuccess) err(1, #x);}
-float *apply_fir(float *buf, size_t N, float *coeff, size_t M, size_t chans)
+void apply_fir(uint8_t *buf, size_t N, const float *fir, size_t M, size_t chans)
 {
     //insure clean decimation
     assert(M%chans==0);
     assert(N%chans==0);
 
-    float *cu_coeff=NULL, *cu_buf=NULL, *cu_smps=NULL;//r,r,w
+    uint8_t *cu_bitty = NULL;
+    float   *cu_fir   = NULL,
+            *cu_buf   = NULL,
+            *cu_smps  = NULL;
 
     //Allocate
     //puts("Allocating...");
-    checked(cudaMalloc((void **)&cu_coeff, M*sizeof(float)));
+    checked(cudaMalloc((void **)&cu_bitty, N));
+    checked(cudaMalloc((void **)&cu_fir, M*sizeof(float)));
     checked(cudaMalloc((void **)&cu_smps, N*sizeof(float)));
-    checked(cudaMalloc((void **)&cu_buf, (N+M)*sizeof(cufftComplex)));
+    checked(cudaMalloc((void **)&cu_buf, (N+M)*sizeof(cufftComplex))); 
+    //TODO check to see if the complex is valid       ^^^^^^^^^^^^
 
     //Send
     //puts("Sending...");
-    checked(cudaMemcpy(cu_coeff, coeff, M*sizeof(float), cudaMemcpyHostToDevice));
-    checked(cudaMemcpy(cu_buf, buf-M, (N+M)*sizeof(float), cudaMemcpyHostToDevice));
+    checked(cudaMemcpy(cu_fir, fir, M*sizeof(float), cudaMemcpyHostToDevice));
+    checked(cudaMemcpy(cu_bitty, buf, N, cudaMemcpyHostToDevice));
+    //Buffer with zeros
+    checked(cudaMemset(cu_buf, 0, M*sizeof(float)));
 
     //Run
     //puts("Filtering...");
-    int block_size = 128;
-    int blocks = N/block_size + (N%block_size == 0 ? 0:1);
-    convolve <<< blocks, block_size >>>(cu_coeff, M, cu_buf+M, N, cu_smps, chans);
+    const int block_size = 128,
+              blocks = N/block_size + (N%block_size == 0 ? 0:1);
+    //Convert to floating point
+    cu_unquantize <<< blocks, block_size >>>(cu_buf+M, cu_bitty, N);
+    cudaDeviceSynchronize();
+
+    convolve <<< blocks, block_size >>>(cu_fir, M, cu_buf+M, N, cu_smps, chans);
     cudaDeviceSynchronize();
 
     //Post Process
@@ -69,20 +97,30 @@ float *apply_fir(float *buf, size_t N, float *coeff, size_t M, size_t chans)
     apply_fft(cu_smps, cu_buf, chans, N/chans);
     cudaDeviceSynchronize();
 
+    //Convert to fixed point
+    cu_quantize <<< blocks, block_size >>>(cu_bitty, cu_buf, N);
+    cudaDeviceSynchronize();
+
     //Retreive
     //puts("Getting...");
-    checked(cudaMemcpy(buf, cu_buf, sizeof(float)*N, cudaMemcpyDeviceToHost));
+    checked(cudaMemcpy(buf, cu_bitty, N, cudaMemcpyDeviceToHost));
 
     //Clean
     //puts("Cleaning...");
-    checked(cudaFree(cu_coeff));
+    checked(cudaFree(cu_bitty));
+    checked(cudaFree(cu_fir));
     checked(cudaFree(cu_smps));
     checked(cudaFree(cu_buf));
-    return buf;
-
 }
 
 void apply_pfb(float *buffer, size_t N, float *coeff, size_t taps, size_t chans)
 {
-    apply_fir(buffer, N, coeff, taps, chans);
+    uint8_t buf[N];
+    apply_quantize(buf, buffer, N);
+    apply_fir(buf, N, coeff, taps, chans);
+    apply_unquantize(buffer, buf, N);
+
+    //rescale w/ fudge factor
+    for(size_t i=0; i<N; ++i)
+        buffer[i] *= chans;
 }
