@@ -5,7 +5,28 @@
 #include "siggen.h"
 #include <err.h>
 
-#define checked(x) { cufftResult_t e = x; if(e) err(e, #x);}
+void show_mem_header(void)
+{
+    puts("free\ttotal\tused");
+}
+void show_mem(const char *func, int line)
+{
+    //int nbytes=100000;
+    float free_m,total_m,used_m;
+    size_t free,total;
+
+    cudaMemGetInfo((size_t*)&free,(size_t*)&total);
+
+    free_m =free/1048576.0 ;
+    total_m=total/1048576.0;
+    used_m=(total_m-free_m);
+    printf ( "%f\t%f\t%f\n", free_m,total_m,used_m);
+}
+
+#define checked(x) { cufftResult_t e = x; if(e) {\
+    fprintf(stderr,"CUFFT error[%s][%d]: %s\n", #x, e,\
+            cudaGetErrorString(cudaGetLastError()));\
+    exit(0);}}
 //apply fft using out of place transform
 float *apply_fft(float *src, float *dest, size_t transform_size, size_t batches)
 {
@@ -38,6 +59,13 @@ __global__ void cu_unquantize(float *dest, const uint8_t *src, size_t N)
         dest[i] = unquantize(src[i]);
 }
 
+__global__ void cu_movement(float *dest, const float *src, size_t N, size_t chans)
+{
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if(i<N)
+        dest[i+2*(i/chans)] = src[i];
+}
+
 __global__ void convolve(float *coeff, size_t N, float *src, size_t M, float *dest, size_t chans)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -54,7 +82,9 @@ __global__ void convolve(float *coeff, size_t N, float *src, size_t M, float *de
 }
 
 #undef checked
-#define checked(x) { if(x!=cudaSuccess) err(1, #x);}
+#define checked(x) { cudaError_t e = x; if(e!= cudaSuccess) {\
+    fprintf(stderr,"CUDA error[%s]: %s\n", #x, cudaGetErrorString(e));\
+    exit(-1);}}
 void apply_fir(uint8_t *buf, size_t N, const float *fir, size_t M, size_t chans)
 {
     //insure clean decimation
@@ -83,23 +113,29 @@ void apply_fir(uint8_t *buf, size_t N, const float *fir, size_t M, size_t chans)
 
     //Run
     //puts("Filtering...");
-    const int block_size = 128,
+    const int block_size = 1024,
               blocks = N/block_size + (N%block_size == 0 ? 0:1);
     //Convert to floating point
     cu_unquantize <<< blocks, block_size >>>(cu_buf+M, cu_bitty, N);
-    cudaDeviceSynchronize();
+    checked(cudaDeviceSynchronize());
 
     convolve <<< blocks, block_size >>>(cu_fir, M, cu_buf+M, N, cu_smps, chans);
-    cudaDeviceSynchronize();
+    checked(cudaDeviceSynchronize());
+
+    cu_movement <<< blocks, block_size >>>(cu_buf, cu_smps, N, chans);
+    checked(cudaDeviceSynchronize());
 
     //Post Process
     //puts("FFT...");
-    apply_fft(cu_smps, cu_buf, chans, N/chans);
-    cudaDeviceSynchronize();
+    apply_fft(cu_buf, cu_buf, chans, N/chans);
+    checked(cudaDeviceSynchronize());
 
     //Convert to fixed point
     cu_quantize <<< blocks, block_size >>>(cu_bitty, cu_buf, N);
-    cudaDeviceSynchronize();
+    checked(cudaDeviceSynchronize());
+
+    //TODO copy back all information or discard unwanted portions, as they are
+    //not needed
 
     //Retreive
     //puts("Getting...");
@@ -115,7 +151,7 @@ void apply_fir(uint8_t *buf, size_t N, const float *fir, size_t M, size_t chans)
 
 void apply_pfb(float *buffer, size_t N, float *coeff, size_t taps, size_t chans)
 {
-    uint8_t buf[N];
+    uint8_t *buf = new uint8_t[N];
     apply_quantize(buf, buffer, N);
     apply_fir(buf, N, coeff, taps, chans);
     apply_unquantize(buffer, buf, N);
