@@ -63,6 +63,7 @@ class freqTest : public CxxTest::TestSuite
             for(unsigned j=0; j<CHANNELS/2+1; ++j)
                 if(j!=expect)
                     TS_ASSERT_LESS_THAN(chans[j], thresh);
+            putchar('.'), fflush(stdout);
         }
         delete [] data;
     }
