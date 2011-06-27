@@ -26,9 +26,9 @@ int main()
     float *smps = new float[MEM_SIZE];
     assert(smps);
     memset(smps, 0, MEM_SIZE*sizeof(float));
-    //gen_chirp(smps, MEM_SIZE, 1024*16, 0.0008);
-    //gen_cos(smps, FRAMES, 500.0);
-    gen_dc(smps, MEM_SIZE);
+    gen_chirp(smps, MEM_SIZE, 1024*16, 0.0008);
+    gen_cos(smps, FRAMES, 500.0);
+    //gen_dc(smps, MEM_SIZE);
 
     //Show previous
     FILE *fb = fopen("before.txt", "w+");
