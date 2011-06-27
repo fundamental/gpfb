@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <err.h>
+#include <assert.h>
 #include "siggen.h"
 #include "param.h"
 #include "process.h"
@@ -22,8 +23,9 @@ int main()
     scale_fir(fir, TAPS);
     window_fir(fir, TAPS);
 
-    float smps[MEM_SIZE];
-    memset(smps, 0, sizeof(smps));
+    float *smps = new float[MEM_SIZE];
+    assert(smps);
+    memset(smps, 0, MEM_SIZE*sizeof(float));
     //gen_chirp(smps, MEM_SIZE, 1024*16, 0.0008);
     //gen_cos(smps, FRAMES, 500.0);
     gen_dc(smps, MEM_SIZE);
@@ -48,5 +50,7 @@ int main()
         fprintf(fa, "%c%f", rowidx?',':'\n', smp);
     }
     fclose(fa);
+
+    delete[] smps;
     return 0;
 }

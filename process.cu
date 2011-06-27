@@ -155,6 +155,7 @@ void apply_pfb(float *buffer, size_t N, float *coeff, size_t taps, size_t chans)
     apply_quantize(buf, buffer, N);
     apply_fir(buf, N, coeff, taps, chans);
     apply_unquantize(buffer, buf, N);
+    delete[] buf;
 
     //rescale w/ fudge factor
     for(size_t i=0; i<N; ++i)

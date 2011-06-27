@@ -40,6 +40,7 @@ class spectrumTest : public CxxTest::TestSuite
      *frequencies */
     void testBins(void)
     {
+        data = new float[MEM_SIZE];
         //Assuming all parameters should be used for testing
         float stepSize = FS*0.01/CHANNELS;
         float chans[CHANNELS/2+1];
@@ -51,6 +52,7 @@ class spectrumTest : public CxxTest::TestSuite
             for(size_t i=0;i<=CHANNELS/2;++i)
                 printf("%c%f",i?',':'\n',chans[i]);
         }
+        delete[] data;
     }
 
     private:
@@ -58,7 +60,7 @@ class spectrumTest : public CxxTest::TestSuite
     float *genCosResponse(float frequency)
     {
         //Zero Out memory
-        memset(data, 0, sizeof(data));
+        memset(data, 0, sizeof(MEM_SIZE)*sizeof(float));
 
         //Generate Cosine
         gen_cos(data, MEM_SIZE, frequency);
@@ -75,6 +77,6 @@ class spectrumTest : public CxxTest::TestSuite
         return data;
     }
 
-    float data[MEM_SIZE];
+    float *data;
 };
 

@@ -33,6 +33,7 @@ class freqTest : public CxxTest::TestSuite
      *frequencies */
     void testBins(void)
     {
+        data = new float[MEM_SIZE];
         //Assuming all parameters should be used for testing
         float stepSize = FS*1.0/CHANNELS;
 
@@ -63,6 +64,7 @@ class freqTest : public CxxTest::TestSuite
                 if(j!=expect)
                     TS_ASSERT_LESS_THAN(chans[j], thresh);
         }
+        delete [] data;
     }
 
     private:
@@ -70,7 +72,7 @@ class freqTest : public CxxTest::TestSuite
     float *genCosResponse(float frequency)
     {
         //Zero Out memory
-        memset(data, 0, sizeof(data));
+        memset(data, 0, sizeof(float)*MEM_SIZE);
 
         //Generate Cosine
         gen_cos(data, MEM_SIZE, frequency);
@@ -86,6 +88,6 @@ class freqTest : public CxxTest::TestSuite
         return data;
     }
 
-    float data[MEM_SIZE];
+    float *data;
 };
 
