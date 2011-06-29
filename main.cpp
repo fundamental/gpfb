@@ -32,7 +32,7 @@ int main()
 
     //Show previous
     FILE *fb = fopen("before.txt", "w+");
-    if(!fb) err(1, 0, "Could not open output");
+    if(!fb) errx(1, "Could not open output");
     for(size_t i=0;i<MEM_SIZE;++i)
         fprintf(fb, "%f, ", smps[i]);
     fclose(fb);
@@ -44,7 +44,7 @@ int main()
 
     //Show results
     FILE *fa = fopen("after.txt", "w+");
-    if(!fa) err(1, 0, "Could not open output");
+    if(!fa) errx(1, "Could not open output");
     float2 *out = (float2*)smps;
     for(size_t rowidx=0,i=0;i<MEM_SIZE/2;i++,rowidx++) {
         float smp = to_real(out[i].x, out[i].y);
