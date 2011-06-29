@@ -26,7 +26,7 @@ class realtimeTest : public CxxTest::TestSuite
 
 
         data = new float[MEM_SIZE];
-        //pfb_t *pfb = alloc_pfb(fir, TAPS, MEM_SIZE, CHANNELS);
+        class Pfb *pfb = alloc_pfb(fir, TAPS, MEM_SIZE, CHANNELS);
 
         //Execute timed pfb
         const clock_t begin = clock();
@@ -36,9 +36,7 @@ class realtimeTest : public CxxTest::TestSuite
             //gen_rand(data, MEM_SIZE, 2.0);
 
             //Filter
-            //apply_pfb(data, pfb);
-
-            apply_pfb(data, MEM_SIZE, fir, TAPS, CHANNELS);
+            apply_pfb(data, pfb);
             putchar('.');
             fflush(stdout);
         }
@@ -52,7 +50,7 @@ class realtimeTest : public CxxTest::TestSuite
         printf("Giga-Samples per second: %f\n", gsps);
         printf("Times Real Time %f\n", gsps*8.0/10);
         
-        //delete_pfb(pfb);
+        delete_pfb(pfb);
         delete[] data;
     }
 

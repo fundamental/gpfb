@@ -4,8 +4,45 @@
 #include <stdint.h>
 #include <math.h>
 #include "siggen.h"
+#include "process.h"
 #include <err.h>
+#include <iostream>
 
+struct Pfb
+{
+    void i_pfb(const float *fir, size_t _nFir, size_t _nSmps, size_t _nChan);
+    void d_pfb(void);
+
+    //Parameter sizes
+    size_t nFir, nSmps, nChan;
+
+    //Device Buffers
+    uint8_t *bitty;
+    float   *fir,
+            *buf,
+            *smps;
+
+    //Host buffer
+    uint8_t *h_buf;
+
+    //FFT handle
+    cufftHandle plan;
+};
+
+class Pfb *alloc_pfb(const float *fir, size_t _nFir, size_t _nSmps, size_t _nChan)
+{
+    Pfb *p = new Pfb;
+    p->i_pfb(fir, _nFir, _nSmps, _nChan);
+    return p;
+}
+
+void delete_pfb(class Pfb *p)
+{
+    p->d_pfb();
+    delete p;
+}
+
+std::ostream &operator<<(std::ostream &out, const Pfb &p);
 void show_mem_header(void)
 {
     puts("free\ttotal\tused");
@@ -24,27 +61,15 @@ void show_mem(void)
     printf ( "%f\t%f\t%f\n", free_m,total_m,used_m);
 }
 
-#define checked(x) { cufftResult_t e = x; if(e) {\
+#define fftchecked(x) { cufftResult_t e = x; if(e) {\
     fprintf(stderr,"CUFFT error[%s][%d]: %s\n", #x, e,\
             cudaGetErrorString(cudaGetLastError()));\
     exit(0);}}
 //apply fft using out of place transform
-float *apply_fft(float *src, float *dest, size_t transform_size, size_t batches)
+float *apply_fft(float *src, float *dest, cufftHandle plan)
 {
-#define CUFFT_LIMIT (1<<25)
-    if(transform_size*batches > CUFFT_LIMIT)
-        fprintf(stderr, "Warning: CUFFT_LIMIT exceeded, please reduce "
-                "batches\n");
-    // Setup
-    cufftHandle plan;
-    checked(cufftPlan1d(&plan, transform_size, CUFFT_R2C, batches));
-
     // Perform FFT
-    checked(cufftExecR2C(plan, src, (cufftComplex *)dest));
-
-    // Cleanup
-    checked(cufftDestroy(plan));
-
+    fftchecked(cufftExecR2C(plan, src, (cufftComplex *)dest));
     return dest;
 }
 
@@ -57,7 +82,7 @@ __global__ void cu_quantize(uint8_t *dest, const float *src, size_t N, size_t
 {
     LOC;
     if(i<N)
-        dest[i] = quantize(src[i])*16/chans/4;
+        dest[i] = quantize(src[i]*2);
 }
 
 __global__ void cu_unquantize(float *dest, const uint8_t *src, size_t N)
@@ -74,50 +99,32 @@ __global__ void cu_movement(float *dest, const float *src, size_t N, size_t chan
         dest[i+2*(i/chans)] = src[i];
 }
 
-__global__ void convolve(float *coeff, size_t N, float *src, size_t M, float *dest, size_t chans)
+__global__ void convolve(float *dest, const float *src, const float *coeff,
+        size_t nC, size_t nS, size_t chan)
 {
     LOC;
-    if (i>=M)
-        return;
+    if (i<nS) {
+        unsigned     sel   = i%chan;
 
-    unsigned sel = i%chans;
-
-    //do actual work at i
-    dest[i] = 0.0;
-    for(size_t j=sel; j<N; j+=chans)
-        dest[i] += src[i-sel-j]*coeff[j];
-    dest[i] /= chans;
+        //do actual work at i
+        float result = 0.0f;
+#pragma unroll
+        for(size_t j=sel; j<nC; j+=chan)
+            result += src[i-sel-j]*coeff[j];
+        dest[i] = result/chan;
+    }
 }
 
 #undef checked
 #define checked(x) { cudaError_t e = x; if(e!= cudaSuccess) {\
-    fprintf(stderr,"CUDA error[%s]: %s\n", #x, cudaGetErrorString(e));\
+    fprintf(stderr,"CUDA error[%s][%d]: %s\n", #x, __LINE__, cudaGetErrorString(e));\
     exit(-1);}}
-void apply_fir(uint8_t *buf, size_t N, const float *fir, size_t M, size_t chans,
-        float *hack)
+void apply_fir(uint8_t *buf, Pfb &pfb, float *hack=NULL)
 {
-    //insure clean decimation
-    assert(M%chans==0);
-    assert(N%chans==0);
-
-    uint8_t *cu_bitty = NULL;
-    float   *cu_fir   = NULL,
-            *cu_buf   = NULL,
-            *cu_smps  = NULL;
-
-    //Allocate
-    //puts("Allocating...");
-    checked(cudaMalloc((void **)&cu_bitty, N));
-    checked(cudaMalloc((void **)&cu_fir, M*sizeof(float)));
-    checked(cudaMalloc((void **)&cu_smps, (N+2*N/chans)*sizeof(float)));
-    checked(cudaMalloc((void **)&cu_buf, (N+2*N/chans+M)*sizeof(float))); 
-
     //Send
-    //puts("Sending...");
-    checked(cudaMemcpy(cu_fir, fir, M*sizeof(float), cudaMemcpyHostToDevice));
-    checked(cudaMemcpy(cu_bitty, buf, N, cudaMemcpyHostToDevice));
+    checked(cudaMemcpy(pfb.bitty, buf, pfb.nSmps, cudaMemcpyHostToDevice));
     //Buffer with zeros
-    checked(cudaMemset(cu_buf, 0, M*sizeof(float)));
+    checked(cudaMemset(pfb.buf, 0, pfb.nFir*sizeof(float)));
 
 /* FIXME these could be changed with device/cuda version
  *       get dynamically from deviceinfo API
@@ -134,58 +141,111 @@ void apply_fir(uint8_t *buf, size_t N, const float *fir, size_t M, size_t chans,
     //puts("Filtering...");
     //Calculate dimensions
     const size_t block_x = MAX_BLOCK,
-                 grid_y = N/MAX_BLOCK > MAX_BLOCK ? MAX_BLOCK : 1,
-                 grid_x  = div_up(N,block_x*grid_y);
+                 grid_y = pfb.nSmps/MAX_BLOCK > MAX_BLOCK ? MAX_BLOCK : 1,
+                 grid_x  = div_up(pfb.nSmps,block_x*grid_y);
     const dim3   block(block_x, 1, 1),
                  grid(grid_x, grid_y, 1);
-    assert(grid.z==1);
 
-    printf("block(%d, %d, %d) grid(%d, %d, %d) for %ld elms.\n", 
-            block.x, block.y, block.z, 
-            grid.x,  grid.y,  grid.z, N);
+    if(0)
+        printf("thread(%d, %d, %d) block(%d, %d, %d) for %ld elms.\n",
+                block.x, block.y, block.z,
+                grid.x,  grid.y,  grid.z, pfb.nSmps);
 
     //Convert to floating point
-    cu_unquantize<<<grid, block>>>(cu_buf+M, cu_bitty, N);
+    cu_unquantize<<<grid, block>>>(pfb.buf+pfb.nFir, pfb.bitty, pfb.nSmps);
 
-    convolve<<<grid, block>>>(cu_fir, M, cu_buf+M, N, cu_smps, chans);
+    convolve<<<grid, block>>>(pfb.smps, pfb.buf+pfb.nFir, pfb.fir, pfb.nFir,
+            pfb.nSmps, pfb.nChan);
 
-    cu_movement<<<grid, block>>>(cu_buf, cu_smps, N, chans);
+    //TODO use memcpy2d
+    cu_movement<<<grid, block>>>(pfb.buf, pfb.smps, pfb.nSmps, pfb.nChan);
     checked(cudaDeviceSynchronize());
 
     //Post Process
-    //puts("FFT...");
-    apply_fft(cu_buf, cu_buf, chans, N/chans);
+    apply_fft(pfb.buf, pfb.buf, pfb.plan);
     checked(cudaDeviceSynchronize());
 
-    //cu_sanity<<<grid, block>>>(cu_buf,N);
-    checked(cudaDeviceSynchronize());
-    if(hack) checked(cudaMemcpy(hack, cu_buf, N*sizeof(float), cudaMemcpyDeviceToHost));
+    if(hack) checked(cudaMemcpy(hack, pfb.buf, pfb.nSmps*sizeof(float), cudaMemcpyDeviceToHost));
+
     //Convert to fixed point
-    cu_quantize<<<grid, block>>>(cu_bitty, cu_buf, N, chans);
-    checked(cudaDeviceSynchronize());
+    cu_quantize<<<grid, block>>>(pfb.bitty, pfb.buf, pfb.nSmps, pfb.nChan);
+
+    //Retreive
+    checked(cudaMemcpy(buf, pfb.bitty, pfb.nSmps, cudaMemcpyDeviceToHost));
 
     //TODO copy back all information or discard unwanted portions, as they are
     //not needed
-
-    //Retreive
-    //puts("Getting...");
-    checked(cudaMemcpy(buf, cu_bitty, N, cudaMemcpyDeviceToHost));
-
-    //Clean
-    //puts("Cleaning...");
-    checked(cudaFree(cu_bitty));
-    checked(cudaFree(cu_fir));
-    checked(cudaFree(cu_smps));
-    checked(cudaFree(cu_buf));
 }
 
-void apply_pfb(float *buffer, size_t N, float *coeff, size_t taps, size_t chans)
+void Pfb::i_pfb(const float *_fir, size_t _nFir, size_t _nSmps, size_t _nChan)
 {
-    uint8_t *buf = new uint8_t[N];
+    nFir  = _nFir;
+    nSmps = _nSmps;
+    nChan = _nChan;
+
+    //insure clean decimation
+    assert((nFir  % nChan) == 0);
+    assert((nSmps % nChan) == 0);
+
+    //Allocate GPU buffers
+    checked(cudaMalloc((void **)&bitty, nSmps));
+    checked(cudaMalloc((void **)&fir, nFir*sizeof(float)));
+    size_t nStrideData = nSmps+2*nSmps/nChan;
+    checked(cudaMalloc((void **)&smps,(nStrideData+nFir)*sizeof(float)));
+    checked(cudaMalloc((void **)&buf, (nStrideData+nFir)*sizeof(float)));
+
+    //Send over FIR data [TODO re-evaluate for const memory]
+    checked(cudaMemcpy(fir, _fir, nFir*sizeof(float), cudaMemcpyHostToDevice));
+
+    //Allocate CPU buffer
+    checked(cudaHostAlloc((void**) &h_buf, nSmps, cudaHostAllocDefault));
+
+    //Allocate FFT
+#define CUFFT_LIMIT (1<<27)
+    if(nSmps > CUFFT_LIMIT)
+        fprintf(stderr, "Warning: CUFFT_LIMIT exceeded, please reduce "
+                "batches\n");
+    // Setup
+    fftchecked(cufftPlan1d(&plan, nChan, CUFFT_R2C, nSmps/nChan));
+    //fftchecked(cufftSetCompatibilityMode(plan, CUFFT_COMPATIBILITY_NATIVE));
+}
+
+void Pfb::d_pfb(void)
+{
+    //Clean up gpu memory
+    checked(cudaFree(bitty));
+    checked(cudaFree(fir));
+    checked(cudaFree(smps));
+    checked(cudaFree(buf));
+
+    //Clean up host memory
+    checked(cudaFreeHost(h_buf));
+
+    // Cleanup
+    fftchecked(cufftDestroy(plan));
+}
+
+std::ostream &operator<<(std::ostream &out, const Pfb &p)
+{
+    using namespace std;
+#define prnt(x) out << #x ": " << (void *) x << endl;
+    prnt(p.nFir);
+    prnt(p.nSmps);
+    prnt(p.nChan);
+    prnt(p.bitty);
+    prnt(p.fir);
+    prnt(p.buf);
+    prnt(p.smps);
+    return out;
+}
+
+void apply_pfb(float *buffer, Pfb *p)
+{
+    const size_t N = p->nSmps;
+    uint8_t *buf   = p->h_buf;
     apply_quantize(buf, buffer, N);
-    apply_fir(buf, N, coeff, taps, chans,buffer);
-    //apply_unquantize(buffer, buf, N);
-    delete[] buf;
+    apply_fir(buf, *p);
+    apply_unquantize(buffer, buf, N);
 
     //rescale w/ fudge factor
     //for(size_t i=0; i<N; ++i)

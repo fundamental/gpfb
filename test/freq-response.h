@@ -84,7 +84,9 @@ class freqTest : public CxxTest::TestSuite
         scale_fir(fir, TAPS);
 
         //Execute pfb
-        apply_pfb(data, MEM_SIZE, fir, TAPS, CHANNELS);
+        class Pfb *pfb = alloc_pfb(fir, TAPS, MEM_SIZE, CHANNELS);
+        apply_pfb(data, pfb);
+        delete_pfb(pfb);
 
         return data;
     }

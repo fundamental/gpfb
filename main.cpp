@@ -38,7 +38,9 @@ int main()
     fclose(fb);
 
     //Apply to samples
-    apply_pfb(smps, MEM_SIZE, fir, TAPS, CHANNELS);
+    class Pfb *pfb = alloc_pfb(fir, TAPS, MEM_SIZE, CHANNELS);
+    apply_pfb(smps, pfb);
+    delete_pfb(pfb);
 
     //Show results
     FILE *fa = fopen("after.txt", "w+");
