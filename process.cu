@@ -42,6 +42,10 @@ void delete_pfb(class Pfb *p)
     delete p;
 }
 
+#define checked(x) { cudaError_t e = x; if(e!= cudaSuccess) {\
+    fprintf(stderr,"CUDA error[%s][%d]: %s\n", #x, __LINE__, cudaGetErrorString(e));\
+    exit(-1);}}
+
 std::ostream &operator<<(std::ostream &out, const Pfb &p);
 void show_mem_header(void)
 {
@@ -61,15 +65,31 @@ void show_mem(void)
     printf ( "%f\t%f\t%f\n", free_m,total_m,used_m);
 }
 
+//assumes smps -> buf
+void fft_pad(Pfb &pfb)
+{
+    //Use Aliases for clarity
+    const size_t width  = pfb.nChan,
+          height = pfb.nSmps/pfb.nChan,
+          sFloat = sizeof(float);
+
+    float *dest = pfb.buf;
+    const float *src = pfb.smps;
+
+    checked(cudaMemcpy2D(dest, (width+2)*sFloat, src, width*sFloat,
+                width*sFloat, height, cudaMemcpyDeviceToDevice));
+}
+
 #define fftchecked(x) { cufftResult_t e = x; if(e) {\
     fprintf(stderr,"CUFFT error[%s][%d]: %s\n", #x, e,\
             cudaGetErrorString(cudaGetLastError()));\
     exit(0);}}
 //apply fft using out of place transform
-float *apply_fft(float *src, float *dest, cufftHandle plan)
+float *apply_fft(float *src, float *dest, Pfb &pfb)
 {
+    fft_pad(pfb);
     // Perform FFT
-    fftchecked(cufftExecR2C(plan, src, (cufftComplex *)dest));
+    fftchecked(cufftExecR2C(pfb.plan, src, (cufftComplex *)dest));
     return dest;
 }
 
@@ -92,13 +112,6 @@ __global__ void cu_unquantize(float *dest, const uint8_t *src, size_t N)
         dest[i] = unquantize(src[i]);
 }
 
-__global__ void cu_movement(float *dest, const float *src, size_t N, size_t chans)
-{
-    LOC;
-    if(i<N)
-        dest[i+2*(i/chans)] = src[i];
-}
-
 __global__ void convolve(float *dest, const float *src, const float *coeff,
         size_t nC, size_t nS, size_t chan)
 {
@@ -115,10 +128,6 @@ __global__ void convolve(float *dest, const float *src, const float *coeff,
     }
 }
 
-#undef checked
-#define checked(x) { cudaError_t e = x; if(e!= cudaSuccess) {\
-    fprintf(stderr,"CUDA error[%s][%d]: %s\n", #x, __LINE__, cudaGetErrorString(e));\
-    exit(-1);}}
 void apply_fir(uint8_t *buf, Pfb &pfb, float *hack=NULL)
 {
     //Send
@@ -157,13 +166,8 @@ void apply_fir(uint8_t *buf, Pfb &pfb, float *hack=NULL)
     convolve<<<grid, block>>>(pfb.smps, pfb.buf+pfb.nFir, pfb.fir, pfb.nFir,
             pfb.nSmps, pfb.nChan);
 
-    //TODO use memcpy2d
-    cu_movement<<<grid, block>>>(pfb.buf, pfb.smps, pfb.nSmps, pfb.nChan);
-    checked(cudaDeviceSynchronize());
-
     //Post Process
-    apply_fft(pfb.buf, pfb.buf, pfb.plan);
-    checked(cudaDeviceSynchronize());
+    apply_fft(pfb.buf, pfb.buf, pfb);
 
     if(hack) checked(cudaMemcpy(hack, pfb.buf, pfb.nSmps*sizeof(float), cudaMemcpyDeviceToHost));
 
