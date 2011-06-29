@@ -3,9 +3,11 @@ project(GPU-PolyPhase-Filter-Bank)
 
 SET(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMake/cuda" ${CMAKE_MODULE_PATH})
 FIND_PACKAGE(CUDA REQUIRED)
+set(CMAKE_CXX_FLAGS "-Wall -Wextra -O3 --fast-math")
 
 #Main description
-CUDA_ADD_LIBRARY(libpfb process.cu siggen.cpp)
+CUDA_ADD_LIBRARY(libpfb process.cu siggen.cpp OPTIONS -arch=compute_20
+        -code=sm_20 RELEASE -use_fast_math)
 ADD_EXECUTABLE(pfb main.cpp)
 target_link_libraries(pfb libpfb)
 find_package(CUDA QUIET REQUIRED)
