@@ -1,7 +1,7 @@
 #include <stddef.h>
 
 //Size of a frame of data
-const unsigned FRAMES = 1<<26;
+const unsigned FRAMES = 1<<10;
 
 //Sample Rate
 const unsigned FS = 1024;//MHz

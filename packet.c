@@ -6,11 +6,12 @@
 
 #define ch(x) { int ret = x; if(ret) err(ret, "Failed to exec %s", #x);}
 static size_t PacketSkipped = 0;
+size_t missed_packet(void) {return PacketSkipped;}
 
 static void skip_packet(size_t _skipped)
 {
     PacketSkipped += _skipped;
-    warnx("skipped a chunk of %lu packets!", _skipped);
+    //warnx("skipped a chunk of %lu packets!", _skipped);
 }
 
 static void set_packet(int32_t pid)

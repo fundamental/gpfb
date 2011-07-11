@@ -13,7 +13,7 @@ void rdbe_free(void *);
  * using rdbe_free
  * Will be length (VDIFF_SIZE-sizeof(vheader_t))*Packets
  */
-const int8_t *rdbe_gather(size_t Packets);
+void rdbe_gather(size_t Packets, int8_t *memory);
 
 #ifdef __cplusplus
 }

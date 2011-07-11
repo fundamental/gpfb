@@ -30,7 +30,7 @@ struct Pfb
     //Call when device buffer is unused
     void run(uint8_t *data) { 
         apply_polyphase(data, *this);
-        checked(cudaDeviceSynchronize());
+        checked(cudaStreamSynchronize(stream));
     };
 
     //Parameter sizes
@@ -47,6 +47,9 @@ struct Pfb
 
     //FFT handle
     cufftHandle plan;
+
+    //stream handle for execution flow
+    cudaStream_t stream;
 };
 
 void Pfb::i_pfb(const float *_fir, size_t _nFir, size_t _nSmps, size_t _nChan)
@@ -80,6 +83,9 @@ void Pfb::i_pfb(const float *_fir, size_t _nFir, size_t _nSmps, size_t _nChan)
     // Setup
     fftchecked(cufftPlan1d(&plan, nChan, CUFFT_R2C, nSmps/nChan));
     //fftchecked(cufftSetCompatibilityMode(plan, CUFFT_COMPATIBILITY_NATIVE));
+    
+    checked(cudaStreamCreate(&stream));
+    fftchecked(cufftSetStream(plan, stream));
 }
 
 void Pfb::d_pfb(void)
@@ -95,6 +101,8 @@ void Pfb::d_pfb(void)
 
     // Cleanup
     fftchecked(cufftDestroy(plan));
+
+    cudaStreamDestroy(stream);
 }
 
 std::ostream &operator<<(std::ostream &out, const Pfb &p)
@@ -153,8 +161,8 @@ void fft_pad(Pfb &pfb)
     float *dest = pfb.buf;
     const float *src = pfb.smps;
 
-    checked(cudaMemcpy2D(dest, (width+2)*sFloat, src, width*sFloat,
-                width*sFloat, height, cudaMemcpyDeviceToDevice));
+    checked(cudaMemcpy2DAsync(dest, (width+2)*sFloat, src, width*sFloat,
+                width*sFloat, height, cudaMemcpyDeviceToDevice, pfb.stream));
 }
 
 //apply fft using out of place transform
@@ -205,9 +213,9 @@ __global__ void convolve(float *dest, const float *src, const float *coeff,
 
 void apply_polyphase(uint8_t *buf, Pfb &pfb, float *hack)
 {
-    checked(cudaMemcpyAsync(pfb.bitty, buf, pfb.nSmps, cudaMemcpyHostToDevice));
+    checked(cudaMemcpyAsync(pfb.bitty, buf, pfb.nSmps, cudaMemcpyHostToDevice, pfb.stream));
     //Buffer with zeros
-    checked(cudaMemset(pfb.buf, 0, pfb.nFir*sizeof(float)));
+    checked(cudaMemsetAsync(pfb.buf, 0, pfb.nFir*sizeof(float), pfb.stream));
 
 /* FIXME these could be changed with device/cuda version
  *       get dynamically from deviceinfo API
@@ -235,21 +243,21 @@ void apply_polyphase(uint8_t *buf, Pfb &pfb, float *hack)
                 grid.x,  grid.y,  grid.z, pfb.nSmps);
 
     //Convert to floating point
-    cu_unquantize<<<grid, block>>>(pfb.buf+pfb.nFir, pfb.bitty, pfb.nSmps);
+    cu_unquantize<<<grid, block, 0, pfb.stream>>>(pfb.buf+pfb.nFir, pfb.bitty, pfb.nSmps);
 
-    convolve<<<grid, block>>>(pfb.smps, pfb.buf+pfb.nFir, pfb.fir, pfb.nFir,
+    convolve<<<grid, block, 0, pfb.stream>>>(pfb.smps, pfb.buf+pfb.nFir, pfb.fir, pfb.nFir,
             pfb.nSmps, pfb.nChan);
 
     //Post Process
     apply_fft(pfb.buf, pfb.buf, pfb);
 
-    if(hack) checked(cudaMemcpyAsync(hack, pfb.buf, pfb.nSmps*sizeof(float), cudaMemcpyDeviceToHost));
+    if(hack) checked(cudaMemcpyAsync(hack, pfb.buf, pfb.nSmps*sizeof(float), cudaMemcpyDeviceToHost, pfb.stream));
 
     //Convert to fixed point
-    cu_quantize<<<grid, block>>>(pfb.bitty, pfb.buf, pfb.nSmps, pfb.nChan);
+    cu_quantize<<<grid, block, 0, pfb.stream>>>(pfb.bitty, pfb.buf, pfb.nSmps, pfb.nChan);
 
     //Retreive
-    checked(cudaMemcpyAsync(buf, pfb.bitty, pfb.nSmps, cudaMemcpyDeviceToHost));
+    checked(cudaMemcpyAsync(buf, pfb.bitty, pfb.nSmps, cudaMemcpyDeviceToHost, pfb.stream));
 
     //TODO copy back all information or discard unwanted portions, as they are
     //not needed
@@ -271,4 +279,17 @@ void apply_pfb(float *buffer, Pfb *p)
     //rescale w/ fudge factor
     //for(size_t i=0; i<N; ++i)
     //    buffer[i] *= chans;
+}
+
+void *getBuffer(size_t N)
+{
+    void *tmp;
+    checked(cudaMallocHost(&tmp, N));
+    return tmp;
+}
+
+void freeBuffer(void *b)
+{
+    if(b)
+        checked(cudaFreeHost(b));
 }

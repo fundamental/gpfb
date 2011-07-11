@@ -59,17 +59,17 @@ void rdbe_disconnect(void)
 
 void rdbe_free(void *m)
 {
-    free(m-sizeof(vheader_t));
+    if(m)
+        free(m-sizeof(vheader_t));
 }
 
-const int8_t *rdbe_gather(size_t Packets)
+void rdbe_gather(size_t Packets, int8_t *memory)
 {
     //define locals
     uint64_t p[4];//sizeof(vheader_t)/64
     void preserve(const uint64_t *m){p[0]=m[0];p[1]=m[1];p[2]=m[2];p[3]=m[3];}
     void restore(uint64_t *m){m[0]=p[0];m[1]=p[1];m[2]=p[2];m[3]=p[3];}
 
-    int8_t *memory = malloc(Packets*VDIFF_SIZE);
     assert(memory);
 
     if (sock<0) errx(1, "%s called without rdbe_connect()", __func__);
@@ -82,7 +82,5 @@ const int8_t *rdbe_gather(size_t Packets)
         process_header(memory+offset);
         restore((uint64_t*)(memory+offset));
     }
-
-    return memory+sizeof(vheader_t);
 }
 
