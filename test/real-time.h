@@ -2,6 +2,8 @@
 #include "../process.h"
 #include "../siggen.h"
 #include "../param.h"
+#include "../packet.h"
+#include "../rdbe.h"
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
@@ -17,26 +19,26 @@ class realtimeTest : public CxxTest::TestSuite
         const size_t       TEST_LENGTH = 128;
         unsigned long long processed   = 0;
 
-        
         //Generate FIR coeffs
         float fir[TAPS];
         gen_fir(fir, TAPS, CHANNELS);
         scale_fir(fir, TAPS);
         window_fir(fir, TAPS);
 
+        size_t DataSize = VDIFF_SIZE-sizeof(vheader_t),
+               length   = TAPS*DataSize;
 
-        data = new float[MEM_SIZE];
-        class Pfb *pfb = alloc_pfb(fir, TAPS, MEM_SIZE, CHANNELS);
+        class Pfb *pfb = alloc_pfb(fir, TAPS, length, CHANNELS);
+        rdbe_connect();
 
         //Execute timed pfb
         const clock_t begin = clock();
-        for(size_t i=0; i<TEST_LENGTH; ++i, processed += MEM_SIZE) {
+        for(size_t i=0; i<TEST_LENGTH; ++i, processed += length) {
             //Gen signal
-            //memset(data, 0, sizeof(data));
-            //gen_rand(data, MEM_SIZE, 2.0);
+            data = (int8_t *) rdbe_gather(TAPS);
 
             //Filter
-            apply_pfb(data, pfb);
+            apply_pfb_direct(data, pfb);
             putchar('.');
             fflush(stdout);
         }
@@ -46,15 +48,16 @@ class realtimeTest : public CxxTest::TestSuite
         puts("");
         printf("Chunk size: %fMB\n", MEM_SIZE/1e6);
         printf("Time spent: %f\n", time_spent);
-        printf("Samples processed: %ld\n", processed);
+        printf("Samples processed: %lld\n", processed);
         printf("Giga-Samples per second: %f\n", gsps);
         printf("Times Real Time %f\n", gsps*8.0/10);
         
+        rdbe_disconnect();
         delete_pfb(pfb);
-        delete[] data;
+        rdbe_free(data);
     }
 
     private:
-    float *data;
+    int8_t *data;
 };
 

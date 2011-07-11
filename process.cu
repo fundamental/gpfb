@@ -255,6 +255,11 @@ void apply_polyphase(uint8_t *buf, Pfb &pfb, float *hack)
     //not needed
 }
 
+void apply_pfb_direct(int8_t *buffer, Pfb *p)
+{
+    p->run((uint8_t*)buffer);
+}
+
 void apply_pfb(float *buffer, Pfb *p)
 {
     const size_t N = p->nSmps;
