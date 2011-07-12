@@ -16,6 +16,10 @@ void apply_polyphase(uint8_t *buf, Pfb &pfb, float *hack=NULL);
     fprintf(stderr,"CUDA error[%s][%d]: %s\n", #x, __LINE__, cudaGetErrorString(e));\
     exit(-1);}}
 
+#define check_launch { cudaError_t e = cudaGetLastError(); if(e!= cudaSuccess) {\
+    fprintf(stderr,"CUDA launch error[%d]: %s\n", __LINE__, cudaGetErrorString(e));\
+    exit(-1);}}
+
 #define fftchecked(x) { cufftResult_t e = x; if(e) {\
     fprintf(stderr,"CUFFT error[%s][%d]: %s\n", #x, e,\
             cudaGetErrorString(cudaGetLastError()));\
@@ -30,8 +34,11 @@ struct Pfb
     //Call when device buffer is unused
     void run(uint8_t *data) { 
         apply_polyphase(data, *this);
-        checked(cudaStreamSynchronize(stream));
     };
+
+    void sync(void) {
+        checked(cudaStreamSynchronize(stream));
+    }
 
     //Parameter sizes
     size_t nFir, nSmps, nChan;
@@ -70,7 +77,9 @@ void Pfb::i_pfb(const float *_fir, size_t _nFir, size_t _nSmps, size_t _nChan)
     checked(cudaMalloc((void **)&buf, (nStrideData+nFir)*sizeof(float)));
 
     //Send over FIR data [TODO re-evaluate for const memory]
-    checked(cudaMemcpy(fir, _fir, nFir*sizeof(float), cudaMemcpyHostToDevice));
+    checked(cudaStreamCreate(&stream));
+    checked(cudaMemcpyAsync(fir, _fir, nFir*sizeof(float),
+                cudaMemcpyHostToDevice, stream));
 
     //Allocate CPU buffer
     checked(cudaHostAlloc((void**) &h_buf, nSmps, cudaHostAllocDefault));
@@ -84,7 +93,6 @@ void Pfb::i_pfb(const float *_fir, size_t _nFir, size_t _nSmps, size_t _nChan)
     fftchecked(cufftPlan1d(&plan, nChan, CUFFT_R2C, nSmps/nChan));
     //fftchecked(cufftSetCompatibilityMode(plan, CUFFT_COMPATIBILITY_NATIVE));
     
-    checked(cudaStreamCreate(&stream));
     fftchecked(cufftSetStream(plan, stream));
 }
 
@@ -244,17 +252,21 @@ void apply_polyphase(uint8_t *buf, Pfb &pfb, float *hack)
 
     //Convert to floating point
     cu_unquantize<<<grid, block, 0, pfb.stream>>>(pfb.buf+pfb.nFir, pfb.bitty, pfb.nSmps);
+    check_launch;
 
     convolve<<<grid, block, 0, pfb.stream>>>(pfb.smps, pfb.buf+pfb.nFir, pfb.fir, pfb.nFir,
             pfb.nSmps, pfb.nChan);
+    check_launch;
 
     //Post Process
     apply_fft(pfb.buf, pfb.buf, pfb);
+    check_launch;
 
     if(hack) checked(cudaMemcpyAsync(hack, pfb.buf, pfb.nSmps*sizeof(float), cudaMemcpyDeviceToHost, pfb.stream));
 
     //Convert to fixed point
     cu_quantize<<<grid, block, 0, pfb.stream>>>(pfb.bitty, pfb.buf, pfb.nSmps, pfb.nChan);
+    check_launch;
 
     //Retreive
     checked(cudaMemcpyAsync(buf, pfb.bitty, pfb.nSmps, cudaMemcpyDeviceToHost, pfb.stream));
@@ -268,12 +280,18 @@ void apply_pfb_direct(int8_t *buffer, Pfb *p)
     p->run((uint8_t*)buffer);
 }
 
+void sync_pfb_direct(Pfb *p)
+{
+    p->sync();
+}
+
 void apply_pfb(float *buffer, Pfb *p)
 {
     const size_t N = p->nSmps;
     uint8_t *buf   = p->h_buf;
     apply_quantize(buf, buffer, N);
     p->run(buf);
+    p->sync();
     apply_unquantize(buffer, buf, N);
 
     //rescale w/ fudge factor
