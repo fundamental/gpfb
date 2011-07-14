@@ -47,13 +47,13 @@ float *window_fir(float *buf, size_t N)
         buf[i] *= hamming(i,N);
 }
 
-void apply_quantize(uint8_t *dest, const float *src, size_t N)
+void apply_quantize(int8_t *dest, const float *src, size_t N)
 {
     for(size_t i=0;i<N;++i)
         dest[i] = quantize(src[i]);
 }
 
-void apply_unquantize(float *dest, const uint8_t *src, size_t N)
+void apply_unquantize(float *dest, const int8_t *src, size_t N)
 {
     for(size_t i=0;i<N;++i)
         dest[i] = unquantize(src[i]);
@@ -103,6 +103,13 @@ float *gen_cos(float *buf, size_t N, float fq)
     for(size_t i=0;i<N;++i)
         buf[i] += cos(rate*i);
     return buf;
+}
+
+void gen_fixed_cos(int8_t *buf, size_t N, float fq)
+{
+    const float rate = 2.0*PI*fq/FS;
+    for(size_t i=0;i<N;++i)
+        buf[i] += quantize(cos(rate*i));
 }
 
 float *gen_chirp(float *buf, size_t N, size_t period, double dr)

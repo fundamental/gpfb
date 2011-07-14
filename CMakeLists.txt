@@ -6,9 +6,10 @@ FIND_PACKAGE(CUDA REQUIRED)
 set(CMAKE_CXX_FLAGS "-g -Wall -Wextra -O2 --fast-math")
 
 #Main description
-CUDA_ADD_LIBRARY(pfb_lib process.cu siggen.cpp OPTIONS -use_fast_math)
+CUDA_ADD_LIBRARY(pfb_lib process.cu siggen.cpp OPTIONS -use_fast_math
+        -code=compute_20 -arch=compute_20)
 ADD_EXECUTABLE(pfb main.cpp)
-target_link_libraries(pfb pfb_lib)
+target_link_libraries(pfb pfb_lib rdbe_lib)
 find_package(CUDA QUIET REQUIRED)
 CUDA_ADD_CUFFT_TO_TARGET(pfb_lib)
 

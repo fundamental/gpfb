@@ -27,7 +27,7 @@ class realtimeTest : public CxxTest::TestSuite
         window_fir(fir, TAPS);
 
         size_t DataSize = VDIFF_SIZE-sizeof(vheader_t),
-               chunk    = (1<<10),
+               chunk    = (1<<13),
                length   = chunk*DataSize;
 
         //create working and loading copies
@@ -43,7 +43,7 @@ class realtimeTest : public CxxTest::TestSuite
         for(size_t i=0; i<TEST_LENGTH; ++i, processed += length) {
             //Gen signal
             sync_pfb_direct(l_pfb);
-            rdbe_gather(chunk, loading);
+            //rdbe_gather(chunk, loading);
 
             std::swap(loading, working);
             std::swap(l_pfb, w_pfb);

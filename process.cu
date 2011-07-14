@@ -9,7 +9,7 @@
 #include <iostream>
 
 //Function Declarations
-void apply_polyphase(uint8_t *buf, Pfb &pfb, float *hack=NULL);
+void apply_polyphase(int8_t *buf, Pfb &pfb, float *hack=NULL);
 
 //Macro Definitions
 #define checked(x) { cudaError_t e = x; if(e!= cudaSuccess) {\
@@ -30,9 +30,9 @@ struct Pfb
 {
     void i_pfb(const float *fir, size_t _nFir, size_t _nSmps, size_t _nChan);
     void d_pfb(void);
-    
+
     //Call when device buffer is unused
-    void run(uint8_t *data) { 
+    void run(int8_t *data) {
         apply_polyphase(data, *this);
     };
 
@@ -44,13 +44,13 @@ struct Pfb
     size_t nFir, nSmps, nChan;
 
     //Device Buffers
-    uint8_t *bitty;
+    int8_t *bitty;
     float   *fir,
             *buf,
             *smps;
 
     //Host buffer
-    uint8_t *h_buf;
+    int8_t *h_buf;
 
     //FFT handle
     cufftHandle plan;
@@ -92,7 +92,7 @@ void Pfb::i_pfb(const float *_fir, size_t _nFir, size_t _nSmps, size_t _nChan)
     // Setup
     fftchecked(cufftPlan1d(&plan, nChan, CUFFT_R2C, nSmps/nChan));
     //fftchecked(cufftSetCompatibilityMode(plan, CUFFT_COMPATIBILITY_NATIVE));
-    
+
     fftchecked(cufftSetStream(plan, stream));
 }
 
@@ -182,13 +182,13 @@ float *apply_fft(float *src, float *dest, Pfb &pfb)
     return dest;
 }
 
-//Main Kernel code 
+//Main Kernel code
 
 //Location is base address + offset
 #define LOC const size_t i =\
                             (gridDim.y*(blockIdx.y*gridDim.x+blockIdx.x))+threadIdx.x
 
-__global__ void cu_quantize(uint8_t *dest, const float *src, size_t N, size_t
+__global__ void cu_quantize(int8_t *dest, const float *src, size_t N, size_t
         chans)
 {
     LOC;
@@ -196,7 +196,7 @@ __global__ void cu_quantize(uint8_t *dest, const float *src, size_t N, size_t
         dest[i] = quantize(src[i]*2);
 }
 
-__global__ void cu_unquantize(float *dest, const uint8_t *src, size_t N)
+__global__ void cu_unquantize(float *dest, const int8_t *src, size_t N)
 {
     LOC;
     if(i<N)
@@ -219,7 +219,7 @@ __global__ void convolve(float *dest, const float *src, const float *coeff,
     }
 }
 
-void apply_polyphase(uint8_t *buf, Pfb &pfb, float *hack)
+void apply_polyphase(int8_t *buf, Pfb &pfb, float *hack)
 {
     checked(cudaMemcpyAsync(pfb.bitty, buf, pfb.nSmps, cudaMemcpyHostToDevice, pfb.stream));
     //Buffer with zeros
@@ -277,7 +277,7 @@ void apply_polyphase(uint8_t *buf, Pfb &pfb, float *hack)
 
 void apply_pfb_direct(int8_t *buffer, Pfb *p)
 {
-    p->run((uint8_t*)buffer);
+    p->run((int8_t*)buffer);
 }
 
 void sync_pfb_direct(Pfb *p)
@@ -288,7 +288,7 @@ void sync_pfb_direct(Pfb *p)
 void apply_pfb(float *buffer, Pfb *p)
 {
     const size_t N = p->nSmps;
-    uint8_t *buf   = p->h_buf;
+    int8_t *buf   = p->h_buf;
     apply_quantize(buf, buffer, N);
     p->run(buf);
     p->sync();

@@ -15,14 +15,14 @@ class firTest : public CxxTest::TestSuite
     void testQuant8(void)
     {
         float   data   = 1.73;
-        uint8_t result = quantize(data);
+        int8_t result = quantize(data);
         TS_ASSERT_DELTA(data, unquantize(result), 0.100);
     }
 
     void testArrayQuant(void)
     {
         float data[3] = {1.3, -0.9, 0.0};
-        uint8_t out[3];
+        int8_t out[3];
         apply_quantize(out, data, 3);
         float result[3];
         apply_unquantize(result, out, 3);

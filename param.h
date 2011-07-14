@@ -4,7 +4,7 @@
 const unsigned FRAMES = 1<<10;
 
 //Sample Rate
-const unsigned FS = 1024;//MHz
+const unsigned FS = 512;//MHz
 
 //Filter Parameters
 const size_t CHANNELS = 32,

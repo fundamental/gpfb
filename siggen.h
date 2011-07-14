@@ -17,10 +17,10 @@ float *window_fir(float *buf, size_t N);
  * Input is [-2.0..2.0], output is [0..255]
  */
 const float q_factor = 255.0/4;
-#define quantize(i) ((i)+2)*q_factor
-#define unquantize(i) (i)/q_factor-2
-void apply_quantize(uint8_t *dest, const float *src, size_t N);
-void apply_unquantize(float *dest, const uint8_t *src, size_t N);
+#define quantize(i) ((i))*q_factor
+#define unquantize(i) (i)/q_factor
+void apply_quantize(int8_t *dest, const float *src, size_t N);
+void apply_unquantize(float *dest, const int8_t *src, size_t N);
 
 //Generate random noise normalized to (-norm..norm)/2
 float *gen_rand(float *buf, size_t N, float norm);
