@@ -6,7 +6,10 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
+#include "rdbe.h"
 #include "packet.h"
+
+using packet::VDIFF_SIZE;
 
 /**
  * RDBE Parameters - aka global constants
@@ -30,14 +33,13 @@ static ssize_t receive(void *buf, size_t len)
     return nb;
 }
 
-void rdbe_connect(void)
+void rdbe::connect(void)
 {
     // preparation for bind
-    const struct sockaddr_in dname = {
-        .sin_family = AF_INET,
-        .sin_port   = htons(Port),
-        .sin_addr   = { .s_addr = inet_addr(Addr)}
-    };
+    struct sockaddr_in dname;
+    dname.sin_family      = AF_INET;
+    dname.sin_port        = htons(Port);
+    dname.sin_addr.s_addr = inet_addr(Addr);
 
     if(dname.sin_addr.s_addr == INADDR_NONE)
         err(1, "Address '%s' is unintelligible.", Addr);
@@ -51,36 +53,35 @@ void rdbe_connect(void)
         err(1, "Failed to bind to port");
 }
 
-void rdbe_disconnect(void)
+void rdbe::disconnect(void)
 {
     close(sock);
     sock = -1;
 }
 
-void rdbe_free(void *m)
-{
-    if(m)
-        free(m-sizeof(vheader_t));
-}
+//faster than a memcpy
+static void preserve(uint64_t *p, const uint64_t *m)
+{p[0]=m[0];p[1]=m[1];p[2]=m[2];p[3]=m[3];}
+static void restore(uint64_t *m, const uint64_t *p)
+{m[0]=p[0];m[1]=p[1];m[2]=p[2];m[3]=p[3];}
 
-void rdbe_gather(size_t Packets, int8_t *memory)
+void rdbe::gather(int8_t *memory, size_t Packets)
 {
     //define locals
     uint64_t p[4];//sizeof(vheader_t)/64
-    void preserve(const uint64_t *m){p[0]=m[0];p[1]=m[1];p[2]=m[2];p[3]=m[3];}
-    void restore(uint64_t *m){m[0]=p[0];m[1]=p[1];m[2]=p[2];m[3]=p[3];}
 
+    //Verify preconditions
     assert(memory);
 
     if (sock<0) errx(1, "%s called without rdbe_connect()", __func__);
 
     //collect packets
     for(size_t i=0; i<Packets; ++i) {
-        const off_t offset = i*(VDIFF_SIZE-sizeof(vheader_t));
-        preserve((uint64_t*)(memory+offset));
+        const off_t offset = i*(VDIFF_SIZE-sizeof(packet::vheader_t));
+        preserve(p, (uint64_t*)(memory+offset));
         receive(memory+offset, VDIFF_SIZE);
-        process_header(memory+offset);
-        restore((uint64_t*)(memory+offset));
+        packet::checkHeader(reinterpret_cast<uint32_t *>(memory+offset));
+        restore((uint64_t*)(memory+offset), p);
     }
 }
 

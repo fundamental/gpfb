@@ -1,12 +1,14 @@
 #include "packet.h"
-#include <err.h> //err & warn
-#include <assert.h> //assert
-#include <netinet/in.h> //ntohl
+#include <err.h>    //err & warn
+#include <cassert>  //assert
 #include <string.h> //memcpy
+#include <cstdio>   //printf
 
 #define ch(x) { int ret = x; if(ret) err(ret, "Failed to exec %s", #x);}
+
 static size_t PacketSkipped = 0;
-size_t missed_packet(void) {return PacketSkipped;}
+size_t packet::missed(void) {return PacketSkipped;}
+void packet::resetMissed(void) {PacketSkipped = 0;}
 
 static void skip_packet(size_t _skipped)
 {
@@ -23,19 +25,19 @@ static void set_packet(int32_t pid)
     previous = pid;
 }
 
-void process_header(vheader_t head)
+void packet::checkHeader(packet::vheader_t head)
 {
     set_packet(head[6]);
     if(head[4]||head[5]) errx(1, "Invalid Packet detected");
 }
 
-void process_packet(int8_t *out, const int8_t *in)
+void packet::process(int8_t *out, const int8_t *in)
 {
     //Gather packet header
     vheader_t head;
     memcpy(head, in, sizeof(vheader_t));
     in += sizeof(vheader_t);
-    process_header(head);
+    checkHeader(head);
 
     const size_t length = VDIFF_SIZE-sizeof(vheader_t);
 
@@ -44,7 +46,7 @@ void process_packet(int8_t *out, const int8_t *in)
     memcpy(data, in, length);
 }
 
-void print_packets(const int8_t *data, size_t N)
+void packet::print(const int8_t *data, size_t N)
 {
     for(size_t i=0;i<N;++i)
         printf("%d\n", data[i]);

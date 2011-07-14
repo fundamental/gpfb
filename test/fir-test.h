@@ -16,12 +16,5 @@ class firTest : public CxxTest::TestSuite
         //insure that sinc integrates to one before normalization
         TS_ASSERT_DELTA(sum, 1.0f, 0.01f);
     }
-
-    void testAssert(void)
-    {
-        TS_ASSERT(23);
-        TS_ASSERT_EQUALS(15,15);
-    }
-
 };
 

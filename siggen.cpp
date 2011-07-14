@@ -45,6 +45,7 @@ float *window_fir(float *buf, size_t N)
 {
     for(size_t i=0;i<N;++i)
         buf[i] *= hamming(i,N);
+    return buf;
 }
 
 void apply_quantize(int8_t *dest, const float *src, size_t N)

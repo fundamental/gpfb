@@ -1,22 +1,23 @@
-#include <stddef.h>
+#include <cstddef>
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace packet
+{
+    const size_t VDIFF_SIZE = 8224;//from vdiff documentation
+    typedef uint32_t vheader_t[8]; //size of packet header
 
-static const size_t VDIFF_SIZE = 8224;//from vdiff documentation
-typedef uint32_t vheader_t[8]; //size of packet header
+    //Total lost packets
+    size_t missed(void);
 
-//total lost packets
-size_t missed_packet(void);
+    //Reset count of missed packets
+    void resetMissed(void);
 
-//Read in packet data
-void process_packet(int8_t *out, const int8_t *in);
+    //Verifies contents of header
+    void checkHeader(vheader_t head);
 
-//Print contents of the packet buffer
-void print_packets(const int8_t *data, size_t N);
+    //Read in packet data
+    void process(int8_t *out, const int8_t *in);
 
-#ifdef __cplusplus
-}
-#endif
+    //Print contents of the packet buffer
+    void print(const int8_t *data, size_t N);
+};

@@ -11,6 +11,9 @@
 #include "packet.h"
 #include "process.h"
 
+using packet::vheader_t;
+using packet::VDIFF_SIZE;
+
 struct cpx_t{uint8_t x,y;};
 
 #define MHZ *1.0
@@ -37,13 +40,13 @@ void execute_pfb(const float *fir, void(*print)(const cpx_t*,size_t))
     class Pfb *gpu_pfb = alloc_pfb(fir, TAPS, len, CHANNELS);
     int8_t *cpu_buf = (int8_t *) getBuffer(DataSize*chunk+sizeof(vheader_t));
     int8_t *gpu_buf = (int8_t *) getBuffer(DataSize*chunk+sizeof(vheader_t));
-    rdbe_connect();
+    rdbe::connect();
 
 #if 1
     void gen_fixed_cos(int8_t *buf, size_t N, float fq);
 
-    //rdbe_gather(chunk, gpu_buf);
-    //rdbe_gather(chunk, cpu_buf);
+    //rdbe::gather(chunk, gpu_buf);
+    //rdbe::gather(chunk, cpu_buf);
     //gen_fixed_cos(cpu_buf, DataSize*chunk, 30.0 MHZ);
     apply_pfb_direct(gpu_buf+sizeof(vheader_t), gpu_pfb);
     apply_pfb_direct(cpu_buf+sizeof(vheader_t), cpu_pfb);
@@ -84,7 +87,7 @@ void execute_pfb(const float *fir, void(*print)(const cpx_t*,size_t))
     //print((const cpx_t*)(cpu_buf+sizeof(vheader_t)), DataSize*chunk/2);
 
     //Cleanup
-    rdbe_disconnect();
+    rdbe::disconnect();
     delete_pfb(cpu_pfb);
     delete_pfb(gpu_pfb);
     freeBuffer(cpu_buf);
