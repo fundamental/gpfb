@@ -26,6 +26,9 @@ static void average(const float *data, float *chans)//[CHANNELS/2+1]
         chans[i] = chans[i]*MEM_SIZE/(CHANNELS+2);
 }
 
+template<class T>
+T&max(T&a,T&b){return a>b?a:b;}
+
 class freqTest : public CxxTest::TestSuite
 {
     public:
@@ -36,33 +39,34 @@ class freqTest : public CxxTest::TestSuite
         data = new float[MEM_SIZE];
         //Assuming all parameters should be used for testing
         float stepSize = FS*1.0/CHANNELS;
+        printf("step size: %f\n", stepSize);
 
         //Require some channel separation
         for(unsigned i=0; i<CHANNELS/2+1; ++i) {
-
+            const size_t expect = i;
             const float freq = i*stepSize;
+
             float chans[CHANNELS/2+1];
             average(genCosResponse(freq), chans);
 
-            size_t expect = i;//==CHANNELS/2 ? 0 : i+1;
-
-#if 0
-            std::cout << "frequency = " << freq << std::endl;
-            //Expected location of signal
-            for(int j=0; j<CHANNELS/2+1; ++j) {
-                std::cout << "chan[" << j << "] = " << chans[j];
-                if(j==expect) std::cout << '*' << std::endl;
-                else std::cout << std::endl;
-            }
-#endif
 
             //Ensure the selected channel has a signal
             TS_ASSERT_LESS_THAN(1.0f, chans[expect]);
-            const float thresh = chans[expect]/10.0f;
+            const float thresh = chans[expect]/30.0f;
 
-            for(unsigned j=0; j<CHANNELS/2+1; ++j)
-                if(j!=expect)
+            float chmax = 0.0f;
+            int   mchan = -1;
+            //Ignore the DC and aliased channels
+            for(unsigned j=1; j<CHANNELS/2; ++j) {
+                if(j!=expect) {
                     TS_ASSERT_LESS_THAN(chans[j], thresh);
+                    if(chmax < chans[j])
+                        mchan = j;
+                    chmax = max(chmax, chans[j]);
+                }
+            }
+            //display gain diff
+            printf("[%f:%d]", chans[expect]/chmax, mchan);
             putchar('.'), fflush(stdout);
         }
         delete [] data;

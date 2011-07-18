@@ -32,8 +32,8 @@ struct Pfb
     void d_pfb(void);
 
     //Call when device buffer is unused
-    void run(int8_t *data) {
-        apply_polyphase(data, *this);
+    void run(int8_t *data, float *hack=NULL) {
+        apply_polyphase(data, *this, hack);
     };
 
     void sync(void) {
@@ -290,9 +290,9 @@ void apply_pfb(float *buffer, Pfb *p)
     const size_t N = p->nSmps;
     int8_t *buf   = p->h_buf;
     apply_quantize(buf, buffer, N);
-    p->run(buf);
+    p->run(buf, buffer);
     p->sync();
-    apply_unquantize(buffer, buf, N);
+    //apply_unquantize(buffer, buf, N);
 
     //rescale w/ fudge factor
     //for(size_t i=0; i<N; ++i)
