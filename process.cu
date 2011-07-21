@@ -203,6 +203,22 @@ __global__ void cu_unquantize(float *dest, const int8_t *src, size_t N)
         dest[i] = src[i];
 }
 
+__global__ void cu_stripper(int8_t *dest, const int8_t *src, size_t destWidth, size_t bytes)
+{
+    LOC;
+    size_t srcWidth = destWidth+4;
+    //transform source
+    size_t j = i%destWidth + (i/destWidth)*srcWidth;
+    //if(j < bytes)
+    size_t N = destWidth+4;
+#if 0
+    if((i%N && (i+1)%N))
+        dest[i] = src[i-2];
+#else
+    dest[i] = src[j];
+#endif
+}
+
 __global__ void convolve(float *dest, const float *src, const float *coeff,
         size_t nC, size_t nS, size_t chan)
 {
@@ -262,6 +278,7 @@ void apply_polyphase(int8_t *buf, Pfb &pfb, float *hack)
     apply_fft(pfb.buf, pfb.buf, pfb);
     check_launch;
 
+    //Provide all channels with full precision
     if(hack) checked(cudaMemcpyAsync(hack, pfb.buf, pfb.nSmps*sizeof(float), cudaMemcpyDeviceToHost, pfb.stream));
 
     //Convert to fixed point
@@ -269,10 +286,28 @@ void apply_polyphase(int8_t *buf, Pfb &pfb, float *hack)
     check_launch;
 
     //Retreive
-    checked(cudaMemcpyAsync(buf, pfb.bitty, pfb.nSmps, cudaMemcpyDeviceToHost, pfb.stream));
+#if 0
+    //checked(cudaMemcpyAsync(buf, pfb.bitty, pfb.nSmps, cudaMemcpyDeviceToHost, pfb.stream));
+#else
+    size_t width = pfb.nChan - 2;
+    //printf("destination: %p\n", buf);
+    //printf("width:       %lu\n", width);
+    //printf("source:      %p\n", pfb.bitty+1);
+    //printf("src stride:  %lu\n", width+2);
+    //printf("height:      %lu\n", pfb.nSmps/width);
 
-    //TODO copy back all information or discard unwanted portions, as they are
-    //not needed
+    checked(cudaMemsetAsync(pfb.smps, 0, pfb.nSmps, pfb.stream));
+
+    //no not that kind
+    cu_stripper<<<grid, block, 0, pfb.stream>>>((int8_t *)pfb.smps,
+            pfb.bitty+2, width, pfb.nSmps);
+    //checked(cudaMemcpy2DAsync(pfb.smps, width, pfb.bitty+1, width+4, width,
+    //            pfb.nSmps/(width+4), cudaMemcpyDeviceToDevice, pfb.stream));
+    //TODO get right length
+    //checked(cudaMemcpyAsync(pfb.smps, pfb.bitty, pfb.nSmps, cudaMemcpyDeviceToDevice, pfb.stream));
+    checked(cudaMemcpyAsync(buf, pfb.smps, pfb.nSmps+0*width*pfb.nSmps/(width+4), cudaMemcpyDeviceToHost, pfb.stream));
+#endif
+
 }
 
 void apply_pfb_direct(int8_t *buffer, Pfb *p)
@@ -292,11 +327,6 @@ void apply_pfb(float *buffer, Pfb *p)
     apply_quantize(buf, buffer, N);
     p->run(buf, buffer);
     p->sync();
-    //apply_unquantize(buffer, buf, N);
-
-    //rescale w/ fudge factor
-    //for(size_t i=0; i<N; ++i)
-    //    buffer[i] *= chans;
 }
 
 void *getBuffer(size_t N)

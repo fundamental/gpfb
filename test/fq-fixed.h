@@ -15,16 +15,20 @@ typedef struct{int8_t x,y;} int82;
 
 static void average(const int8_t *data, float *chans)//[CHANNELS/2+1]
 {
-    memset(chans, 0, (CHANNELS/2+1)*sizeof(float));
+    size_t length = MEM_SIZE/CHANNELS*(CHANNELS/2-2);
+    memset(chans, 0, (CHANNELS/2-1)*sizeof(float));
     int82 *out = (int82*)data;
-    for(size_t rowidx=0,i=0;i<MEM_SIZE/2;i++,rowidx++) {
-        rowidx %= (CHANNELS/2+1);
+    for(size_t rowidx=0,i=0;i<length;i++,rowidx++) {
+        rowidx %= (CHANNELS/2-1);
         chans[rowidx] += to_real(float(out[i].x), float(out[i].y));
     }
 
-    for(size_t i=0;i<=CHANNELS/2;++i)
-        chans[i] = chans[i]*MEM_SIZE/(CHANNELS+2);
+    printf("[");
+    for(size_t i=0;i<CHANNELS/2-1;++i)
+        printf("%f ", chans[i]);
+    printf("]\n");
 }
+
 
 template<class T>
 T&max(T&a,T&b){return a>b?a:b;}
@@ -43,10 +47,10 @@ class freqQuantTest : public CxxTest::TestSuite
                     minSep   = 30.0f;
 
         //Verify seperation condition
-        for(unsigned ch=1; ch<CHANNELS/2; ++ch) {
-            const float freq = ch*chSize;
+        for(unsigned ch=0; ch<CHANNELS/2-1; ++ch) {
+            const float freq = (ch+1)*chSize;
 
-            float chans[CHANNELS/2+1];
+            float chans[CHANNELS/2-1];
             average(genCosResponse(freq, data), chans);
 
             //Expected channel should have a signal
@@ -57,7 +61,7 @@ class freqQuantTest : public CxxTest::TestSuite
             float chmax = 0.0f;
             int   mchan = -1;
             //Ignore the DC and aliased channels
-            for(unsigned j=1; j<CHANNELS/2; ++j) {
+            for(unsigned j=0; j<CHANNELS/2; ++j) {
                 if(j==ch) continue;
 
                 TS_ASSERT_LESS_THAN(chans[j], thresh);

@@ -101,7 +101,7 @@ void print_fn(const cpx_t *out, size_t N)
     static size_t rowidx=0;
     for(size_t i=0;i<N;i++,rowidx++) {
         float smp = to_real(out[i]);
-        rowidx %= (CHANNELS/2+1);
+        rowidx %= (CHANNELS/2-1);
         fprintf(output, "%c%f", rowidx?',':'\n', smp);
     }
 
