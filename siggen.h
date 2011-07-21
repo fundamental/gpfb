@@ -39,6 +39,7 @@ float *gen_dc(float *buf, size_t N);
 
 //generate cosine wave at frequency fq
 float *gen_cos(float *buf, size_t N, float fq);
+void gen_fixed_cos(int8_t *buf, size_t N, float fq);
 
 //TODO update function to new conventions
 float *gen_chirp(float *buf, size_t N, size_t period, double dr);
