@@ -7,21 +7,21 @@ class firTest : public CxxTest::TestSuite
     public:
     void testQuant(void)
     {
-        float data[3] = {1.3, -0.9, 0.0};
+        float data[3] = {0.3, -0.9, 0.0};
         for(int i=0;i<3;++i)
             TS_ASSERT_DELTA(data[i], unquantize(quantize(data[i])), 0.001);
     }
 
     void testQuant8(void)
     {
-        float   data   = 1.73;
+        float   data   = 0.73;
         int8_t result = quantize(data);
         TS_ASSERT_DELTA(data, unquantize(result), 0.100);
     }
 
     void testArrayQuant(void)
     {
-        float data[3] = {1.3, -0.9, 0.0};
+        float data[3] = {0.3, -0.9, 0.0};
         int8_t out[3];
         apply_quantize(out, data, 3);
         float result[3];

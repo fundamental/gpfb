@@ -16,7 +16,7 @@ float *window_fir(float *buf, size_t N);
  * Perform 8 bit quantization and dequantization 
  * Input is [-2.0..2.0], output is [0..255]
  */
-const float q_factor = 255.0/4;
+const float q_factor = 127.0;
 #define quantize(i) ((i))*q_factor
 #define unquantize(i) (i)/q_factor
 void apply_quantize(int8_t *dest, const float *src, size_t N);

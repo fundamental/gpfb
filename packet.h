@@ -13,7 +13,7 @@ namespace packet
     void resetMissed(void);
 
     //Verifies contents of header
-    void checkHeader(vheader_t head);
+    void checkHeader(const vheader_t head);
 
     //Read in packet data
     void process(int8_t *out, const int8_t *in);

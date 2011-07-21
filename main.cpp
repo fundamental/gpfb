@@ -14,15 +14,15 @@
 using packet::vheader_t;
 using packet::VDIFF_SIZE;
 
-struct cpx_t{uint8_t x,y;};
+struct cpx_t{int8_t x,y;};
 
 #define MHZ *1.0
 
 //Complex to real
 static float to_real(const cpx_t &cpx)
 {
-    const float x = unquantize(cpx.x),
-                y = unquantize(cpx.y);
+    const float x = cpx.x,
+                y = cpx.y;
 
     return sqrt(x*x+y*y);
 }
@@ -45,9 +45,10 @@ void execute_pfb(const float *fir, void(*print)(const cpx_t*,size_t))
 #if 1
     void gen_fixed_cos(int8_t *buf, size_t N, float fq);
 
-    //rdbe::gather(chunk, gpu_buf);
-    //rdbe::gather(chunk, cpu_buf);
-    //gen_fixed_cos(cpu_buf, DataSize*chunk, 30.0 MHZ);
+    rdbe::gather(gpu_buf, chunk);
+    //rdbe::gather(cpu_buf, chunk);
+    memset(cpu_buf, 0, chunk);
+    gen_fixed_cos(cpu_buf, DataSize*chunk, 24.0 MHZ);
     apply_pfb_direct(gpu_buf+sizeof(vheader_t), gpu_pfb);
     apply_pfb_direct(cpu_buf+sizeof(vheader_t), cpu_pfb);
 
@@ -83,8 +84,8 @@ void execute_pfb(const float *fir, void(*print)(const cpx_t*,size_t))
     sync_pfb_direct(cpu_pfb);
 
     //Print data
-    //print((const cpx_t*)(gpu_buf+sizeof(vheader_t)), DataSize*chunk/2);
-    //print((const cpx_t*)(cpu_buf+sizeof(vheader_t)), DataSize*chunk/2);
+    print((const cpx_t*)(gpu_buf+sizeof(vheader_t)), DataSize*chunk/2);
+    print((const cpx_t*)(cpu_buf+sizeof(vheader_t)), DataSize*chunk/2);
 
     //Cleanup
     rdbe::disconnect();
@@ -103,6 +104,10 @@ void print_fn(const cpx_t *out, size_t N)
         rowidx %= (CHANNELS/2+1);
         fprintf(output, "%c%f", rowidx?',':'\n', smp);
     }
+
+    //account for currently missing samples
+    fprintf(output, "\n");
+    rowidx = 0;
 }
 
 int main()

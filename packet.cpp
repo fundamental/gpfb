@@ -25,7 +25,7 @@ static void set_packet(int32_t pid)
     previous = pid;
 }
 
-void packet::checkHeader(packet::vheader_t head)
+void packet::checkHeader(const packet::vheader_t head)
 {
     set_packet(head[6]);
     if(head[4]||head[5]) errx(1, "Invalid Packet detected");

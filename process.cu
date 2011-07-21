@@ -193,14 +193,14 @@ __global__ void cu_quantize(int8_t *dest, const float *src, size_t N, size_t
 {
     LOC;
     if(i<N)
-        dest[i] = quantize(src[i]*2);
+        dest[i] = static_cast<int8_t>(src[i]*2);
 }
 
 __global__ void cu_unquantize(float *dest, const int8_t *src, size_t N)
 {
     LOC;
     if(i<N)
-        dest[i] = unquantize(src[i]);
+        dest[i] = src[i];
 }
 
 __global__ void convolve(float *dest, const float *src, const float *coeff,

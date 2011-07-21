@@ -28,7 +28,7 @@ static ssize_t receive(void *buf, size_t len)
     if(nb < 0)
         err(1, "Failed to get rdbe packet");
     if(nb != (int) VDIFF_SIZE)
-        warn("Packet size does not match VDIFF_SIZE %d != %d", nb, 
+        warnx("Packet size does not match VDIFF_SIZE %d != %d", nb,
                 (int) VDIFF_SIZE);
     return nb;
 }
@@ -57,18 +57,22 @@ void rdbe::disconnect(void)
 {
     close(sock);
     sock = -1;
+
+    if(packet::missed())
+        warn("A total of %lu packets were dropped\n", packet::missed());
 }
 
 //faster than a memcpy
-static void preserve(uint64_t *p, const uint64_t *m)
+static void preserve(int64_t *p, const int64_t *m)
 {p[0]=m[0];p[1]=m[1];p[2]=m[2];p[3]=m[3];}
-static void restore(uint64_t *m, const uint64_t *p)
+static void restore(int64_t *m, const int64_t *p)
 {m[0]=p[0];m[1]=p[1];m[2]=p[2];m[3]=p[3];}
 
 void rdbe::gather(int8_t *memory, size_t Packets)
 {
     //define locals
-    uint64_t p[4];//sizeof(vheader_t)/64
+    assert(sizeof(packet::vheader_t)*8/64==4);
+    int64_t p[4];
 
     //Verify preconditions
     assert(memory);
@@ -78,10 +82,10 @@ void rdbe::gather(int8_t *memory, size_t Packets)
     //collect packets
     for(size_t i=0; i<Packets; ++i) {
         const off_t offset = i*(VDIFF_SIZE-sizeof(packet::vheader_t));
-        preserve(p, (uint64_t*)(memory+offset));
+        preserve(p, reinterpret_cast<const int64_t*>(memory+offset));
         receive(memory+offset, VDIFF_SIZE);
-        packet::checkHeader(reinterpret_cast<uint32_t *>(memory+offset));
-        restore((uint64_t*)(memory+offset), p);
+        packet::checkHeader(reinterpret_cast<const uint32_t *>(memory+offset));
+        restore(reinterpret_cast<int64_t*>(memory+offset), p);
     }
 }
 
