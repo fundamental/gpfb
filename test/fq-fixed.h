@@ -13,11 +13,32 @@ static float to_real(float x, float y)
 
 typedef struct{int8_t x,y;} int82;
 
-static void average(const int8_t *data, float *chans)//[CHANNELS/2+1]
+void print_fn(const int82 *out, size_t N=(MEM_SIZE/CHANNELS*(CHANNELS/2-2)))
 {
+    static size_t rowidx=0;
+    for(size_t i=0;i<N;i++,rowidx++) {
+        float smp = to_real(float(out[i].x), float(out[i].y));
+        rowidx %= (CHANNELS/2-1);
+        printf("%c%f", rowidx?',':'\n', smp);
+    }
+
+    //account for currently missing samples
+    printf("\n");
+    rowidx = 0;
+}
+
+//warning a large amount of discards are required for fixed testing
+static void average(int8_t *data, float *chans, size_t discards=8)
+{
+    int82 *out = reinterpret_cast<int82*>(data);
     size_t length = MEM_SIZE/CHANNELS*(CHANNELS/2-2);
+
+    //print_fn(out);
+
     memset(chans, 0, (CHANNELS/2-1)*sizeof(float));
-    int82 *out = (int82*)data;
+    //discard the first several rows
+    memset(out, 0, (CHANNELS/2-1)*discards*sizeof(int82));
+    //print_fn(out);
     for(size_t rowidx=0,i=0;i<length;i++,rowidx++) {
         rowidx %= (CHANNELS/2-1);
         chans[rowidx] += to_real(float(out[i].x), float(out[i].y));
@@ -33,6 +54,7 @@ static void average(const int8_t *data, float *chans)//[CHANNELS/2+1]
 template<class T>
 T&max(T&a,T&b){return a>b?a:b;}
 #define HZ
+
 
 //performs the quantized frequency test
 class freqQuantTest : public CxxTest::TestSuite

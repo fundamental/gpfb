@@ -193,7 +193,7 @@ __global__ void cu_quantize(int8_t *dest, const float *src, size_t N, size_t
 {
     LOC;
     if(i<N)
-        dest[i] = static_cast<int8_t>(src[i]*2);
+        dest[i] = (static_cast<int8_t>(src[i]*7.5f)&0xc0);//0x00);//src[i]/32);//*128.0);
 }
 
 __global__ void cu_unquantize(float *dest, const int8_t *src, size_t N)
@@ -201,6 +201,20 @@ __global__ void cu_unquantize(float *dest, const int8_t *src, size_t N)
     LOC;
     if(i<N)
         dest[i] = src[i];
+}
+
+//half compression function
+__device__ inline int8_t hcomp(int32_t d)
+{
+    return (d&0xc0000000>>24)|(d&0xc00000>>18)|(d&0xc000>>12)|(d&0xc0>>6);
+}
+
+__global__ void cu_compress(int8_t *data)
+{
+    LOC;
+    //warning thread sync issues?
+    int32_t chunk = ((int32_t*) data)[i];
+    data[i] = hcomp(chunk);
 }
 
 __global__ void cu_stripper(int8_t *dest, const int8_t *src, size_t destWidth, size_t bytes)
@@ -215,7 +229,7 @@ __global__ void cu_stripper(int8_t *dest, const int8_t *src, size_t destWidth, s
     if((i%N && (i+1)%N))
         dest[i] = src[i-2];
 #else
-    dest[i] = src[j];
+    dest[i] = src[j];//&0xc0;
 #endif
 }
 
@@ -308,6 +322,12 @@ void apply_polyphase(int8_t *buf, Pfb &pfb, float *hack)
     checked(cudaMemcpyAsync(buf, pfb.smps, pfb.nSmps+0*width*pfb.nSmps/(width+4), cudaMemcpyDeviceToHost, pfb.stream));
 #endif
 
+#if 0
+    dim3 nblock = block;
+    nblock.x /= 4;
+    cu_compress<<<grid, nblock, 0, pfb.stream>>>(pfb.bitty);
+
+#endif
 }
 
 void apply_pfb_direct(int8_t *buffer, Pfb *p)

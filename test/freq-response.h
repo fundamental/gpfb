@@ -13,10 +13,13 @@ static float to_real(float x, float y)
 
 typedef struct{float x,y;} float2;
 
-static void average(const float *data, float *chans)//[CHANNELS/2+1]
+static void average(const float *data, float *chans, size_t discards=6)
 {
     memset(chans, 0, (CHANNELS/2+1)*sizeof(float));
     float2 *out = (float2*)data;
+
+    //discard the first several rows
+    memset(out, 0, (CHANNELS/2+1)*discards*sizeof(float2));
     for(size_t rowidx=0,i=0;i<MEM_SIZE/2;i++,rowidx++) {
         rowidx %= (CHANNELS/2+1);
         chans[rowidx] += to_real(out[i].x, out[i].y);
@@ -81,7 +84,7 @@ class freqTest : public CxxTest::TestSuite
 
         //Generate Cosine
         gen_cos(data, MEM_SIZE, frequency);
-        
+
         //Generate FIR coeffs [could have scope expanded]
         float fir[TAPS];
         gen_fir(fir, TAPS, CHANNELS);

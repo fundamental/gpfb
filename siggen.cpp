@@ -66,6 +66,11 @@ float *gen_rand(float *buf, size_t N, float norm)
         buf[i] += rand()*norm/RAND_MAX - norm/2.0;
     return buf;
 }
+void gen_rand(int8_t *buf, size_t N)
+{
+    for(size_t i=0;i<N;++i)
+        buf[i] += rand()&0xff;
+}
 
 float *gen_imp(float *buf, size_t N)
 {

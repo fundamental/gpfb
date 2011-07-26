@@ -24,6 +24,7 @@ void apply_unquantize(float *dest, const int8_t *src, size_t N);
 
 //Generate random noise normalized to (-norm..norm)/2
 float *gen_rand(float *buf, size_t N, float norm);
+void gen_rand(int8_t *buf, size_t N);
 
 //Generate impulse
 float *gen_imp(float *buf, size_t N);

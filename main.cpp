@@ -21,8 +21,11 @@ struct cpx_t{int8_t x,y;};
 //Complex to real
 static float to_real(const cpx_t &cpx)
 {
-    const float x = cpx.x,
-                y = cpx.y;
+    float x = (cpx.x>>6),
+          y = (cpx.y>>6);
+    x+=0.5f;
+    y+=0.5f;
+    //return x;
 
     return sqrt(x*x+y*y);
 }
@@ -31,7 +34,7 @@ void execute_pfb(const float *fir, void(*print)(const cpx_t*,size_t))
 {
     //Decide on parameters of execution
     const size_t DataSize = VDIFF_SIZE-sizeof(vheader_t),
-                 chunk    = 1<<11,
+                 chunk    = 1<<5,
                  iter     = 2,
                  len      = DataSize*chunk;
 
@@ -46,9 +49,10 @@ void execute_pfb(const float *fir, void(*print)(const cpx_t*,size_t))
     void gen_fixed_cos(int8_t *buf, size_t N, float fq);
 
     rdbe::gather(gpu_buf, chunk);
-    //rdbe::gather(cpu_buf, chunk);
+    rdbe::gather(cpu_buf, chunk);
     memset(cpu_buf, 0, chunk);
-    gen_fixed_cos(cpu_buf, DataSize*chunk, 24.0 MHZ);
+    //gen_fixed_cos(cpu_buf, DataSize*chunk, 24.0 MHZ);
+    gen_rand(gpu_buf, DataSize*chunk);
     apply_pfb_direct(gpu_buf+sizeof(vheader_t), gpu_pfb);
     apply_pfb_direct(cpu_buf+sizeof(vheader_t), cpu_pfb);
 
@@ -81,11 +85,12 @@ void execute_pfb(const float *fir, void(*print)(const cpx_t*,size_t))
 
     //Ensure valid data exists
     sync_pfb_direct(gpu_pfb);
-    sync_pfb_direct(cpu_pfb);
+    //sync_pfb_direct(cpu_pfb);
 
     //Print data
-    print((const cpx_t*)(gpu_buf+sizeof(vheader_t)), DataSize*chunk/2);
-    print((const cpx_t*)(cpu_buf+sizeof(vheader_t)), DataSize*chunk/2);
+    size_t length = DataSize*chunk/CHANNELS*(CHANNELS/2-2);
+    print((const cpx_t*)(gpu_buf+sizeof(vheader_t)), length);
+    //print((const cpx_t*)(cpu_buf+sizeof(vheader_t)), DataSize*chunk/2);
 
     //Cleanup
     rdbe::disconnect();

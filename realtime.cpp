@@ -14,7 +14,7 @@ using packet::vheader_t;
 //Run PFB a large number of times to see appx data rate
 int main()
 {
-    const size_t       TEST_LENGTH = 1<<10;
+    const size_t       TEST_LENGTH = 1<<3;
     unsigned long long processed   = 0;
 
     //Generate FIR coeffs
@@ -40,7 +40,8 @@ int main()
     for(size_t i=0; i<TEST_LENGTH; ++i, processed += length) {
         //Gen signal
         sync_pfb_direct(l_pfb);
-        //rdbe_gather(chunk, loading);
+        sync_pfb_direct(w_pfb);
+        //rdbe::gather(loading, chunk);
 
         std::swap(loading, working);
         std::swap(l_pfb, w_pfb);
