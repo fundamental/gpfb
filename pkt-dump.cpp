@@ -21,29 +21,27 @@ int fsize(FILE *f)
     ch(fseek(f, 0, SEEK_SET));//return to start
     return size;
 }
-    
+
 int main(int argc, char **argv)
 {
     if(argc != 2) errx(1, "usage %s #packets", *argv);
 
     const size_t Packets   = atoll(argv[1]),
-                 FrameSize = VDIFF_SIZE-sizeof(vheader_t),
+                 Vpad      = sizeof(packet::vheader_t),
+                 FrameSize = packet::VDIFF_SIZE-Vpad,
                  DataSize  = FrameSize*Packets;
 
     comment("#Packet Count: %lu\n", Packets);
     comment("#Buffer Size:  %lu\n", DataSize);
 
-    rdbe_connect();
-    const int8_t *packets = rdbe_gather(Packets);
-    rdbe_disconnect();
+    int8_t *data = new int8_t[DataSize+Vpad];
+    rdbe::connect();
+    rdbe::gather(data, Packets);
+    rdbe::disconnect();
 
-    
-#ifdef DO_PRINT
-    print_packets(packets, DataSize);
-#endif
-    
-    //Cleanup
-    rdbe_free((void*)packets);
+    packet::print(data, DataSize);
+
+    delete [] data;
 
     return 0;
 }

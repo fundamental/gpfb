@@ -34,6 +34,10 @@ target_link_libraries(rt-summary cuda rdbe)
 add_executable(spectrum-summary spectrum.cpp)
 target_link_libraries(spectrum-summary cuda)
 
+#Packet Dump
+add_executable(pkt-dump pkt-dump.cpp)
+target_link_libraries(pkt-dump rdbe)
+
 set(HERE ${CMAKE_CURRENT_SOURCE_DIR})
 #Code sanity verification
 if(CXXTEST_FOUND)
