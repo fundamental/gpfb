@@ -1,0 +1,96 @@
+CUDA Polyphase Filter Bank (CPFB)
+=================================
+:Author:    Mark McCurry
+:Email:     mark.d.mccurry _AT g mail
+:Date:      7-21-2011
+
+
+
+Getting Started
+---------------
+This project is designed to provided an implementation of a polyphase filter for
+use with vdiff packets and a software correlator.
+Requirements:
+- cmake
+- CUFFT
+- CUDA
+
+From the current directory:
+
+----
+mkdir build
+cd build
+cmake ..
+make
+make test
+----
+
+Produced Utilities
+------------------
+Currently few of the utilities process command arguments or configuration files.
+Module dependency is fairly minimal, so changing this should require fairly
+minimal work.
+
+Full Processing(pfb)
+~~~~~~~~~~~~~~~~~~~~
+
+This program executes the full processing chain and dumps the result to file for
+analysis.
+As this has not be used with tools further in the signal processing
+chain, the output is a csv of channels by time.
+This process occurs with full quantization.
+
+Realtime Performance(rt-summary)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Summarizes the realtime performance of the GPU processing.  This summary does
+not account for any overhead that CPU based vdiff packet work may involve, but
+this has tended to be fairly minimal.
+
+Filter Characteristics(spectrum-summary)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Produce the frequency response of all channels in the filter.
+This is performed with floating point data.
+For basic information on fixed point responses, see the fixed point filter test.
+
+Packet Viewing(pkt-dump)
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Viewing the packet output of the roach system can be an important stage of
+debugging.
+This program accepts the number of packets as an argument. 
+
+System Parameters
+-----------------
+
+As mentioned previously, the parameters of the system currently reside in the
+code, some more formally than others.
+For the entire system, the characteristics of the pfb are set in *params.h*
+
+CHANNELS::
+  The total number of channels or split FIR sections for the PFB.
+  This sets the output to be (CHANNELS/2+1) frequency bins.
+TAPS::
+  The number of taps for the prototype FIR filter.
+  It is assumed that TAPS%CHANNELS = 0.
+FS::
+  For testing FS is used to describe frequency over normalized frequency
+
+For specific utilities:
+
+MEM_SIZE::
+  Deprecated buffer length for testing, defined in *param.h* used in frequency
+  response tests and spectrum summary
+TEST_LENGTH::
+  Number of iterations to average performance over.
+  Defined for *realtime.cpp*, only for rt-summary.
+Packets::
+  This defines the number of packets to be read in *main.cpp*.
+  This is also defined separately in *realtime.cpp*.
+Addr::
+  The current address of the source of vdiff packets.
+  Defined and used in *rdbe.cpp*.
+Port::
+  The current port of the source of the vdiff packets.
+  Defined and used in *rdbe.cpp*.
