@@ -1,12 +1,11 @@
 cmake_minimum_required(VERSION 2.6)
-project("GPU PolyPhase Filter Bank")
+project("gpfb") #GPU-PolyPhase-Filter-Bank
 
 #Common options
 find_package(CxxTest)
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMake/cuda" ${CMAKE_MODULE_PATH})
 set(CMAKE_CXX_FLAGS "-g -Wall -Wextra -O2 --fast-math")
 set(CMAKE_BUILD_TYPE DEBUG)
-add_definitions(-DVERBOSE=1)
 
 #Cuda Setup
 find_package(CUDA QUIET REQUIRED)
@@ -51,4 +50,12 @@ if(CXXTEST_FOUND)
     target_link_libraries(qpfb-test cuda)
     target_link_libraries(quant-test cuda)
 endif()
+
+#CPack
+install(TARGETS rt-summary spectrum-summary pfb pkt-dump DESTINATION bin)
+install(FILES README LICENSE DESTINATION doc/gpfb/)
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "gpfb - GPU Polyphase Filter Bank")
+set(CPACK_PACKAGE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+include(CPack)
 
