@@ -12,10 +12,11 @@ static float to_real(float x, float y)
 
 typedef struct{float x,y;} float2;
 
-static void avg(const float *data, float *chans)//[CHANNELS/2+1]
+static void avg(const float *data, float *chans, size_t discards=6)
 {
-    memset(chans, 0, (CHANNELS/2+1)*sizeof(float));
+    memset(chans, 0, (CHANNELS/2)*sizeof(float));
     float2 *out = (float2*)data;
+    memset(out, 0, (CHANNELS/2)*discards*sizeof(float2));
     for(size_t rowidx=0,i=0;i<MEM_SIZE/2;i++,rowidx++) {
         float smp = to_real(out[i].x, out[i].y);
         rowidx %= (CHANNELS/2+1);
@@ -33,7 +34,7 @@ int main()
     float *data = new float[MEM_SIZE];
     //Assuming all parameters should be used for testing
     float stepSize = FS*0.01/CHANNELS;
-    float chans[CHANNELS/2+1];
+    float chans[CHANNELS/2];
 
     for(unsigned i=0; i*stepSize<FS/2.0; ++i) {
         const float freq = i*stepSize;
@@ -53,7 +54,7 @@ float *genCosResponse(float *data, float frequency)
 
     //Generate Cosine
     gen_cos(data, MEM_SIZE, frequency);
-        
+
     //Generate FIR coeffs [could have scope expanded]
     float fir[TAPS];
     gen_fir(fir, TAPS, CHANNELS);
