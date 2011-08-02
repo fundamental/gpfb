@@ -18,6 +18,12 @@ CUDA_ADD_LIBRARY(cuda process.cu siggen.cpp OPTIONS -use_fast_math
 CUDA_ADD_CUFFT_TO_TARGET(cuda)
 CUDA_BUILD_CLEAN_TARGET()
 
+#Configuration Options
+set(PFB_OUTPUT_PACKED false CACHE BOOL "Enable stripping of unused channels
+        (performance costly)")
+
+add_definitions(-DPFB_OUTPUT_PACKED=${PFB_OUTPUT_PACKED})
+
 #RDBE library
 add_library(rdbe packet.cpp rdbe.cpp)
 

@@ -1,5 +1,6 @@
 #include <stddef.h>
 #include <stdint.h>
+#include <complex>
 
 class Pfb;
 //Result is returned interleaved in buffer
@@ -12,3 +13,6 @@ void delete_pfb(class Pfb *p);
 
 void *getBuffer(size_t N);
 void freeBuffer(void *b);
+
+using std::complex;
+complex<float> getSmp(const int8_t *data, off_t N);

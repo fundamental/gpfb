@@ -1,4 +1,5 @@
 #include <cuda.h>
+#include <math_functions.h>
 #include <cufft.h>
 #include <assert.h>
 #include <stdint.h>
@@ -206,31 +207,27 @@ __global__ void cu_unquantize(float *dest, const int8_t *src, size_t N)
 //half compression function
 __device__ inline int8_t hcomp(int32_t d)
 {
-    return (d&0xc0000000>>24)|(d&0xc00000>>18)|(d&0xc000>>12)|(d&0xc0>>6);
+    const int8_t *x = reinterpret_cast<const int8_t*>(&d);
+    return (x[3]&0xc0)|((x[2]&0xc0)>>2)|((x[1]&0xc0)>>4)|((x[0]&0xc0)>>6);
 }
 
-__global__ void cu_compress(int8_t *data)
+__global__ void cu_compress(int8_t *dest, const int32_t *src, size_t N)
 {
     LOC;
-    //warning thread sync issues?
-    int32_t chunk = ((int32_t*) data)[i];
-    data[i] = hcomp(chunk);
+    if(i<N)
+        dest[i] = hcomp(src[i]);
 }
 
 __global__ void cu_stripper(int8_t *dest, const int8_t *src, size_t destWidth, size_t bytes)
 {
     LOC;
+    if(i>bytes)
+        return;
+
     size_t srcWidth = destWidth+4;
     //transform source
     size_t j = i%destWidth + (i/destWidth)*srcWidth;
-    //if(j < bytes)
-    size_t N = destWidth+4;
-#if 0
-    if((i%N && (i+1)%N))
-        dest[i] = src[i-2];
-#else
-    dest[i] = src[j];//&0xc0;
-#endif
+    dest[i] = src[j];
 }
 
 __global__ void convolve(float *dest, const float *src, const float *coeff,
@@ -238,6 +235,7 @@ __global__ void convolve(float *dest, const float *src, const float *coeff,
 {
     LOC;
     if (i<nS) {
+        nC = 256;
         unsigned     sel   = i%chan;
 
         //do actual work at i
@@ -300,34 +298,34 @@ void apply_polyphase(int8_t *buf, Pfb &pfb, float *hack)
     check_launch;
 
     //Retreive
-#if 0
-    //checked(cudaMemcpyAsync(buf, pfb.bitty, pfb.nSmps, cudaMemcpyDeviceToHost, pfb.stream));
-#else
+#if PFB_OUTPUT_PACKED
     size_t width = pfb.nChan - 2;
-    //printf("destination: %p\n", buf);
-    //printf("width:       %lu\n", width);
-    //printf("source:      %p\n", pfb.bitty+1);
-    //printf("src stride:  %lu\n", width+2);
-    //printf("height:      %lu\n", pfb.nSmps/width);
 
-    checked(cudaMemsetAsync(pfb.smps, 0, pfb.nSmps, pfb.stream));
+
+    //checked(cudaMemsetAsync(pfb.smps, 0, pfb.nSmps, pfb.stream));
 
     //no not that kind
     cu_stripper<<<grid, block, 0, pfb.stream>>>((int8_t *)pfb.smps,
             pfb.bitty+2, width, pfb.nSmps);
-    //checked(cudaMemcpy2DAsync(pfb.smps, width, pfb.bitty+1, width+4, width,
-    //            pfb.nSmps/(width+4), cudaMemcpyDeviceToDevice, pfb.stream));
-    //TODO get right length
-    //checked(cudaMemcpyAsync(pfb.smps, pfb.bitty, pfb.nSmps, cudaMemcpyDeviceToDevice, pfb.stream));
-    checked(cudaMemcpyAsync(buf, pfb.smps, pfb.nSmps+0*width*pfb.nSmps/(width+4), cudaMemcpyDeviceToHost, pfb.stream));
+    check_launch;
+
+    checked(cudaMemsetAsync(pfb.bitty, 0xdb, pfb.nSmps, pfb.stream));
+
+    cu_compress<<<grid, block, 0, pfb.stream>>>(pfb.bitty, (const
+                int32_t*)pfb.smps, pfb.nSmps/4);
+    check_launch;
+
+    size_t lenScaled = pfb.nSmps*(pfb.nChan+2)/pfb.nChan/4;
+    checked(cudaMemcpyAsync(buf, pfb.bitty, lenScaled, cudaMemcpyDeviceToHost, pfb.stream));
+#else
+    cu_compress<<<grid, block, 0, pfb.stream>>>((int8_t*)pfb.smps, (const
+                int32_t*)pfb.bitty, pfb.nSmps/4);
+    check_launch;
+
+    size_t lenScaled = pfb.nSmps*(pfb.nChan+2)/pfb.nChan/4;
+    checked(cudaMemcpyAsync(buf, pfb.smps, lenScaled, cudaMemcpyDeviceToHost, pfb.stream));
 #endif
 
-#if 0
-    dim3 nblock = block;
-    nblock.x /= 4;
-    cu_compress<<<grid, nblock, 0, pfb.stream>>>(pfb.bitty);
-
-#endif
 }
 
 void apply_pfb_direct(int8_t *buffer, Pfb *p)
@@ -360,4 +358,17 @@ void freeBuffer(void *b)
 {
     if(b)
         checked(cudaFreeHost(b));
+}
+
+static int8_t getPt(const int8_t *data, off_t N)
+{
+    size_t address = N/4;
+    size_t shift   = 2*(N%4);
+    return (data[address]>>shift)&0x3;
+}
+
+complex<float> getSmp(const int8_t *data, off_t N)
+{
+    return complex<float>(float(getPt(data, 2*N)),
+                          float(getPt(data, 2*N+1)));
 }
