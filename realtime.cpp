@@ -24,8 +24,8 @@ int main()
     window_fir(fir, TAPS);
 
     size_t DataSize = VDIFF_SIZE-sizeof(vheader_t),
-           chunk    = (1<<13),
-           length   = chunk*DataSize;
+           Packets    = (1<<13),
+           length   = Packets*DataSize;
 
     //create working and loading copies
     class Pfb *l_pfb = alloc_pfb(fir, TAPS, length, CHANNELS);
@@ -40,8 +40,8 @@ int main()
     for(size_t i=0; i<TEST_LENGTH; ++i, processed += length) {
         //Gen signal
         sync_pfb_direct(l_pfb);
-        sync_pfb_direct(w_pfb);
-        //rdbe::gather(loading, chunk);
+        //sync_pfb_direct(w_pfb);
+        //rdbe::gather(loading, Packets);
 
         std::swap(loading, working);
         std::swap(l_pfb, w_pfb);
@@ -57,8 +57,8 @@ int main()
     double time_spent = (double)(dt.tv_sec*1.0+dt.tv_usec*1e-6);
     double gsps = processed/time_spent/1e9;
     puts("");
-    printf("Lost packets:      %lu of %lu\n", packet::missed(), (chunk*TEST_LENGTH));
-    printf("Drop rate:         %f%%\n", packet::missed()*100.0/(chunk*TEST_LENGTH));
+    printf("Lost packets:      %lu of %lu\n", packet::missed(), (Packets*TEST_LENGTH));
+    printf("Drop rate:         %f%%\n", packet::missed()*100.0/(Packets*TEST_LENGTH));
     printf("Chunk size:        %fMB\n", length/1e6);
     printf("Samples processed: %lld\n", processed);
     printf("Size processed:    %fGB\n", processed/1e9);
