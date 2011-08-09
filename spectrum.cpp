@@ -11,15 +11,18 @@ static float to_real(float x, float y)
 };
 
 typedef struct{float x,y;} float2;
-
-static void avg(const float *data, float *chans, size_t discards=6)
+#define MEM_SIZE 2048
+static void avg(const float *data, float *chans, size_t discards=8)
 {
-    memset(chans, 0, (CHANNELS/2)*sizeof(float));
+    //extra work is done to avoid transients and partial sample rows
+    memset(chans, 0, (CHANNELS/2+1)*sizeof(float));
     float2 *out = (float2*)data;
-    memset(out, 0, (CHANNELS/2)*discards*sizeof(float2));
-    for(size_t rowidx=0,i=0;i<MEM_SIZE/2;i++,rowidx++) {
+    memset(out, 0, (CHANNELS/2+1)*discards*sizeof(float2));
+    size_t length = MEM_SIZE/2 - (MEM_SIZE/2%(CHANNELS/2+1));
+    for(size_t rowidx=0,i=0;i<length;i++,rowidx++) {
         float smp = to_real(out[i].x, out[i].y);
         rowidx %= (CHANNELS/2+1);
+        //printf("%c%f",rowidx?',':'\n',smp);
         chans[rowidx] += smp;
     }
 
@@ -41,7 +44,7 @@ int main()
         //printf("#frequency:=%f",freq);
         avg(genCosResponse(data, freq), chans);
         for(size_t i=0;i<=CHANNELS/2;++i)
-            printf("%c%f",i?',':'\n',chans[i]);
+            printf("%c%f",i?',':'\n',chans[i]* (!i||i==CHANNELS/2?0.0f:2.0f));
     }
     delete[] data;
 }
@@ -54,6 +57,8 @@ float *genCosResponse(float *data, float frequency)
 
     //Generate Cosine
     gen_cos(data, MEM_SIZE, frequency);
+    //printf("data[132] %f", data[132]);
+    //*((char*)0x00);
 
     //Generate FIR coeffs [could have scope expanded]
     float fir[TAPS];

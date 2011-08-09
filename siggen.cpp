@@ -48,10 +48,13 @@ float *window_fir(float *buf, size_t N)
     return buf;
 }
 
+#include <cstdio>
 void apply_quantize(int8_t *dest, const float *src, size_t N)
 {
     for(size_t i=0;i<N;++i)
         dest[i] = quantize(src[i]);
+    //for(size_t i=0;i<N;++i)
+    //    printf("%f -> %d vs %d\n", src[i], dest[i], static_cast<int>(quantize(src[i])));
 }
 
 void apply_unquantize(float *dest, const int8_t *src, size_t N)
@@ -107,7 +110,7 @@ float *gen_cos(float *buf, size_t N, float fq)
 {
     const float rate = 2.0*PI*fq/FS;
     for(size_t i=0;i<N;++i)
-        buf[i] += cos(rate*i);
+        buf[i] = cos(rate*i)*0.5;
     return buf;
 }
 

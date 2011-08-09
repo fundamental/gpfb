@@ -291,7 +291,10 @@ void apply_polyphase(int8_t *buf, Pfb &pfb, float *hack)
     check_launch;
 
     //Provide all channels with full precision
-    if(hack) checked(cudaMemcpyAsync(hack, pfb.buf, pfb.nSmps*sizeof(float), cudaMemcpyDeviceToHost, pfb.stream));
+    if(hack){
+        checked(cudaMemcpyAsync(hack, pfb.buf, pfb.nSmps*sizeof(float), cudaMemcpyDeviceToHost, pfb.stream));
+        checked(cudaStreamSynchronize(pfb.stream));
+    }
 
     //Convert to fixed point
     cu_quantize<<<grid, block, 0, pfb.stream>>>(pfb.bitty, pfb.buf, pfb.nSmps, pfb.nChan);
